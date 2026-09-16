@@ -1,0 +1,3639 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>SPECTRA v16 • Signal Analysis</title>
+
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+<style>
+
+:root{
+  --bg:#061019;
+  --panel:#0b1a25;
+  --panel2:#0e202d;
+  --line:#1d3949;
+  --line2:#2a4b5d;
+  --text:#edf6fb;
+  --muted:#8ea7b6;
+  --accent:#55d7ff;
+  --accent2:#7ce7b1;
+  --warn:#ffd166;
+  --danger:#ff7d8a;
+  --shadow:0 16px 45px rgba(0,0,0,.22)
+}
+
+*{
+  box-sizing:border-box
+}
+
+html{
+  scroll-behavior:smooth
+}
+
+body{
+  margin:0;
+  background:
+    radial-gradient(
+      circle at 75% -10%,
+      #123044 0,
+      #07131c 34%,
+      var(--bg) 70%
+    );
+  color:var(--text);
+  font:14px Inter,Segoe UI,Arial,sans-serif;
+  min-height:100vh
+}
+
+button,input,select{
+  font:inherit
+}
+
+.app{
+  display:grid;
+  grid-template-columns:238px 1fr;
+  min-height:100vh
+}
+
+.sidebar{
+  position:sticky;
+  top:0;
+  height:100vh;
+  padding:24px 16px;
+  border-right:1px solid var(--line);
+  background:rgba(5,15,23,.86);
+  backdrop-filter:blur(16px);
+  z-index:10
+}
+
+.brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:4px 10px 28px
+}
+
+.logo{
+  width:34px;
+  height:34px;
+  border:1px solid #3b7890;
+  border-radius:10px;
+  display:grid;
+  place-items:center;
+  color:var(--accent);
+  font-weight:800;
+  box-shadow:0 0 22px rgba(85,215,255,.14)
+}
+
+.brand b{
+  font-size:18px;
+  letter-spacing:.12em
+}
+
+.brand span{
+  display:block;
+  color:var(--muted);
+  font-size:10px;
+  margin-top:2px;
+  letter-spacing:.08em
+}
+
+.nav{
+  display:grid;
+  gap:5px
+}
+
+.nav a{
+  color:#a9bfca;
+  text-decoration:none;
+  padding:11px 12px;
+  border-radius:9px;
+  display:flex;
+  gap:10px;
+  align-items:center;
+  border:1px solid transparent
+}
+
+.nav a:hover,
+.nav a.active{
+  background:#0d2330;
+  border-color:#214354;
+  color:#fff
+}
+
+.nav .dot{
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:#466778
+}
+
+.sidefoot{
+  position:absolute;
+  bottom:20px;
+  left:20px;
+  right:20px;
+  color:#6f8998;
+  font-size:11px;
+  line-height:1.5
+}
+
+.main{
+  min-width:0
+}
+
+.topbar{
+  height:72px;
+  padding:0 30px;
+  border-bottom:1px solid var(--line);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  background:rgba(6,16,25,.55);
+  backdrop-filter:blur(12px);
+  position:sticky;
+  top:0;
+  z-index:8
+}
+
+.eyebrow{
+  color:var(--accent);
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.14em;
+  text-transform:uppercase
+}
+
+.top-title{
+  font-size:16px;
+  font-weight:700;
+  margin-top:3px
+}
+
+.status{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  border:1px solid var(--line2);
+  padding:8px 11px;
+  border-radius:999px;
+  background:#091822;
+  color:#a9c1cc;
+  font-size:11px
+}
+
+.status i{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:#5a7380
+}
+
+.status.ready i{
+  background:var(--accent2);
+  box-shadow:0 0 10px rgba(124,231,177,.55)
+}
+
+.status.busy i{
+  background:var(--warn);
+  box-shadow:0 0 10px rgba(255,209,102,.45)
+}
+
+.status.error i{
+  background:var(--danger)
+}
+
+.content{
+  max-width:1500px;
+  margin:auto;
+  padding:28px 30px 50px
+}
+
+.hero{
+  display:flex;
+  justify-content:space-between;
+  gap:24px;
+  align-items:flex-end;
+  margin-bottom:22px
+}
+
+.hero h1{
+  margin:0;
+  font-size:30px;
+  letter-spacing:-.03em
+}
+
+.hero p{
+  margin:8px 0 0;
+  color:var(--muted);
+  max-width:700px
+}
+
+.hero-meta{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap
+}
+
+.chip{
+  border:1px solid var(--line);
+  background:#091822;
+  color:#9eb4c0;
+  border-radius:999px;
+  padding:7px 10px;
+  font-size:11px
+}
+
+.card{
+  background:
+    linear-gradient(
+      145deg,
+      rgba(13,31,43,.96),
+      rgba(8,22,31,.96)
+    );
+  border:1px solid var(--line);
+  border-radius:15px;
+  box-shadow:var(--shadow)
+}
+
+.upload{
+  padding:18px;
+  margin-bottom:20px
+}
+
+.upload-grid{
+  display:grid;
+  grid-template-columns:1.5fr 1fr 150px 140px auto;
+  gap:10px;
+  align-items:center
+}
+
+.drop{
+  border:1px dashed #315568;
+  border-radius:11px;
+  min-height:52px;
+  padding:8px 12px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  background:#081721;
+  transition:.2s
+}
+
+.drop.drag{
+  border-color:var(--accent);
+  background:#0a202b
+}
+
+.drop input{
+  display:none
+}
+
+.choose{
+  padding:9px 12px;
+  border:1px solid var(--line2);
+  border-radius:8px;
+  background:#102c3b;
+  cursor:pointer;
+  white-space:nowrap
+}
+
+.file-name{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:#d9e8ee
+}
+
+.field{
+  display:flex;
+  flex-direction:column;
+  gap:5px
+}
+
+.field label{
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.1em;
+  color:#708b99
+}
+
+.field input,
+.field select{
+  height:42px;
+  width:100%;
+  background:#081721;
+  color:#eaf5f9;
+  border:1px solid var(--line2);
+  border-radius:9px;
+  padding:0 11px;
+  outline:none
+}
+
+.field input:focus,
+.field select:focus{
+  border-color:#4f94ad;
+  box-shadow:0 0 0 3px rgba(85,215,255,.08)
+}
+
+.primary{
+  height:42px;
+  border:1px solid #3e829c;
+  border-radius:9px;
+  background:linear-gradient(135deg,#15506a,#12384a);
+  color:#fff;
+  font-weight:700;
+  cursor:pointer;
+  padding:0 16px;
+  white-space:nowrap
+}
+
+.primary:hover{
+  filter:brightness(1.12)
+}
+
+.primary:disabled{
+  opacity:.55;
+  cursor:not-allowed
+}
+
+.file-hint{
+  grid-column:1/-1;
+  color:#718b98;
+  font-size:11px;
+  padding-left:2px
+}
+
+.section-title{
+  display:flex;
+  align-items:end;
+  justify-content:space-between;
+  margin:26px 0 12px
+}
+
+.section-title h2{
+  margin:0;
+  font-size:16px
+}
+
+.section-title span{
+  font-size:11px;
+  color:var(--muted)
+}
+
+.metrics{
+  display:grid;
+  grid-template-columns:repeat(8,1fr);
+  gap:10px
+}
+
+.metric{
+  padding:15px 16px;
+  min-height:105px
+}
+
+.metric .label{
+  color:#86a1af;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  font-size:10px;
+  font-weight:700
+}
+
+.metric .value{
+  font-size:21px;
+  font-weight:750;
+  margin-top:14px;
+  letter-spacing:-.02em;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+
+.metric.primary-metric{
+  border-color:#27586b;
+  background:linear-gradient(145deg,#0d2634,#0a1b26)
+}
+
+.metric.primary-metric .value{
+  color:var(--accent)
+}
+
+.candidates{
+  padding:18px
+}
+
+.candidate{
+  display:grid;
+  grid-template-columns:95px 1fr 62px;
+  align-items:center;
+  gap:12px;
+  margin:11px 0
+}
+
+.candidate .name{
+  font-weight:700
+}
+
+.candidate .pct{
+  text-align:right;
+  color:#b7cbd4;
+  font-variant-numeric:tabular-nums
+}
+
+.track{
+  height:9px;
+  background:#122a37;
+  border:1px solid #1b3948;
+  border-radius:99px;
+  overflow:hidden
+}
+
+.fill{
+  height:100%;
+  background:linear-gradient(90deg,#2389b0,var(--accent));
+  border-radius:99px;
+  transition:width .5s ease
+}
+
+.empty{
+  color:var(--muted);
+  padding:10px 0
+}
+
+.plots{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px
+}
+
+.plot-card{
+  padding:0;
+  overflow:hidden
+}
+
+.plot-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:16px 18px 4px
+}
+
+.plot-head h3{
+  margin:0;
+  font-size:14px
+}
+
+.plot-head span{
+  font-size:10px;
+  color:#708995
+}
+
+.plot{
+  height:370px
+}
+
+.wide .plot{
+  height:440px
+}
+
+.param-layout{
+  display:grid;
+  grid-template-columns:1.6fr 1fr;
+  gap:14px
+}
+
+.table-card{
+  padding:18px
+}
+
+.subhead{
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  color:#6f8997;
+  font-weight:700;
+  margin:3px 0 12px
+}
+
+table{
+  width:100%;
+  border-collapse:collapse
+}
+
+td{
+  padding:10px 4px;
+  border-bottom:1px solid rgba(39,68,82,.62);
+  vertical-align:middle
+}
+
+td:first-child{
+  color:#94abb7;
+  width:55%
+}
+
+td:last-child{
+  text-align:right;
+  color:#e7f3f7;
+  font-weight:600;
+  font-variant-numeric:tabular-nums
+}
+
+.noise-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:10px;
+  margin-bottom:14px
+}
+
+.noise-box{
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:#091821
+}
+
+.noise-box label{
+  display:block;
+  color:#728c99;
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.09em
+}
+
+.noise-box b{
+  display:block;
+  font-size:18px;
+  margin-top:8px
+}
+
+.callout{
+  padding:15px;
+  border-radius:11px;
+  border:1px solid #284656;
+  background:#0a1b25;
+  color:#9eb5c0;
+  line-height:1.55
+}
+
+.callout strong{
+  color:#dcebf0
+}
+
+/* ============================================================
+   DIGITAL ANALYSIS
+   ============================================================ */
+
+.digital-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px
+}
+
+.digital-card{
+  padding:18px
+}
+
+.digital-card.full{
+  grid-column:1/-1
+}
+
+.digital-title{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:16px
+}
+
+.digital-title h3{
+  margin:0;
+  font-size:15px
+}
+
+.digital-title span{
+  color:var(--muted);
+  font-size:10px
+}
+
+.status-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid var(--line2);
+  background:#091822;
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.04em
+}
+
+.status-pill.good{
+  color:var(--accent2);
+  border-color:#2e6753;
+  background:#0a211b
+}
+
+.status-pill.warn{
+  color:var(--warn);
+  border-color:#68582c;
+  background:#211d0d
+}
+
+.status-pill.neutral{
+  color:#9eb4c0
+}
+
+.digital-metrics{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px
+}
+
+.digital-metric{
+  padding:13px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:#091821
+}
+
+.digital-metric label{
+  display:block;
+  color:#728c99;
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:.09em
+}
+
+.digital-metric b{
+  display:block;
+  margin-top:7px;
+  font-size:17px
+}
+
+.bitstream-wrap{
+  position:relative
+}
+
+.bitstream{
+  width:100%;
+  min-height:180px;
+  max-height:330px;
+  overflow:auto;
+  padding:16px;
+  border:1px solid var(--line2);
+  border-radius:10px;
+  background:#050f16;
+  color:#9fe7ff;
+  font-family:
+    "Cascadia Mono",
+    Consolas,
+    "Courier New",
+    monospace;
+  font-size:12px;
+  line-height:1.75;
+  letter-spacing:.06em;
+  word-break:break-all;
+  white-space:pre-wrap
+}
+
+.bitstream-meta{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-top:10px;
+  color:var(--muted);
+  font-size:10px
+}
+
+.copy-btn{
+  border:1px solid var(--line2);
+  background:#102c3b;
+  color:#dcebf0;
+  border-radius:8px;
+  padding:8px 12px;
+  cursor:pointer;
+  font-size:11px
+}
+
+.copy-btn:hover{
+  border-color:#4f94ad;
+  background:#14394a
+}
+
+.evidence{
+  padding:13px;
+  border-radius:10px;
+  border:1px solid var(--line);
+  background:#091821;
+  margin-top:12px
+}
+
+.evidence label{
+  display:block;
+  color:#728c99;
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:.09em;
+  margin-bottom:8px
+}
+
+.reason-list{
+  margin:0;
+  padding-left:18px;
+  color:#b9cbd3;
+  line-height:1.7;
+  font-size:12px
+}
+
+.reason-list li{
+  margin:2px 0
+}
+
+.code-rates{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px
+}
+
+.rate-chip{
+  border:1px solid var(--line2);
+  border-radius:999px;
+  padding:5px 8px;
+  color:#b9d0da;
+  background:#0a1a24;
+  font-size:10px
+}
+
+.disclaimer{
+  margin-top:14px;
+  padding:12px 14px;
+  border-left:3px solid #416779;
+  background:#091821;
+  color:#819aa7;
+  font-size:11px;
+  line-height:1.55
+}
+
+.confidence-bar{
+  height:8px;
+  background:#122a37;
+  border:1px solid #1b3948;
+  border-radius:99px;
+  overflow:hidden;
+  margin-top:8px
+}
+
+.confidence-fill{
+  height:100%;
+  background:linear-gradient(90deg,#2389b0,var(--accent));
+  border-radius:99px
+}
+
+.footer-note{
+  margin-top:18px;
+  color:#617b89;
+  font-size:11px
+}
+
+.spinner{
+  display:inline-block;
+  width:12px;
+  height:12px;
+  border:2px solid #54717f;
+  border-top-color:var(--accent);
+  border-radius:50%;
+  animation:spin .8s linear infinite;
+  vertical-align:-2px
+}
+
+@keyframes spin{
+  to{
+    transform:rotate(360deg)
+  }
+}
+
+@media(max-width:1250px){
+
+  .metrics{
+    grid-template-columns:repeat(4,1fr)
+  }
+
+  .upload-grid{
+    grid-template-columns:1.5fr 1fr 130px 120px auto
+  }
+
+  .param-layout{
+    grid-template-columns:1fr
+  }
+
+  .sidebar{
+    width:210px
+  }
+
+  .app{
+    grid-template-columns:210px 1fr
+  }
+
+}
+
+@media(max-width:1000px){
+
+  .digital-grid{
+    grid-template-columns:1fr
+  }
+
+  .digital-card.full{
+    grid-column:auto
+  }
+
+}
+
+@media(max-width:900px){
+
+  .app{
+    display:block
+  }
+
+  .sidebar{
+    position:relative;
+    height:auto;
+    width:auto;
+    border-right:0;
+    border-bottom:1px solid var(--line);
+    padding:12px 16px
+  }
+
+  .brand{
+    padding:4px 4px 12px
+  }
+
+  .nav{
+    display:flex;
+    overflow:auto
+  }
+
+  .nav a{
+    white-space:nowrap
+  }
+
+  .sidefoot{
+    display:none
+  }
+
+  .topbar{
+    position:relative;
+    padding:0 18px
+  }
+
+  .content{
+    padding:20px 16px
+  }
+
+  .upload-grid{
+    grid-template-columns:1fr 1fr
+  }
+
+  .drop{
+    grid-column:1/-1
+  }
+
+  .primary{
+    width:100%
+  }
+
+  .plots{
+    grid-template-columns:1fr
+  }
+
+  .hero{
+    display:block
+  }
+
+  .hero-meta{
+    margin-top:14px
+  }
+
+}
+
+@media(max-width:600px){
+
+  .metrics{
+    grid-template-columns:1fr 1fr
+  }
+
+  .upload-grid{
+    grid-template-columns:1fr
+  }
+
+  .noise-grid{
+    grid-template-columns:1fr 1fr
+  }
+
+  .digital-metrics{
+    grid-template-columns:1fr 1fr
+  }
+
+  .metric .value{
+    font-size:18px
+  }
+
+  .hero h1{
+    font-size:25px
+  }
+
+  .plot{
+    height:320px
+  }
+
+  .wide .plot{
+    height:360px
+  }
+
+  .candidate{
+    grid-template-columns:75px 1fr 54px
+  }
+
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+<aside class="sidebar">
+
+  <div class="brand">
+    <div class="logo">S</div>
+    <div>
+      <b>SPECTRA</b>
+      <span>RF ANALYSIS PLATFORM</span>
+    </div>
+  </div>
+
+  <nav class="nav">
+
+    <a href="#overview" class="active">
+      <span class="dot"></span>
+      Overview
+    </a>
+
+    <a href="#modulation">
+      <span class="dot"></span>
+      Modulation
+    </a>
+
+    <a href="#visuals">
+      <span class="dot"></span>
+      Visual Analysis
+    </a>
+
+    <a href="#parameters">
+      <span class="dot"></span>
+      Parameters
+    </a>
+
+    <a href="#noise">
+      <span class="dot"></span>
+      Noise & SNR
+    </a>
+
+    <a href="#digital">
+      <span class="dot"></span>
+      Digital Analysis
+    </a>
+
+  </nav>
+
+  <div class="sidefoot">
+    v16 • DSP + ML<br>
+    Local analysis • No signal data leaves your machine
+  </div>
+
+</aside>
+
+
+<main class="main">
+
+<header class="topbar">
+
+  <div>
+    <div class="eyebrow">
+      SPECTRA / SIGNAL ANALYSIS
+    </div>
+
+    <div class="top-title">
+      AI-Assisted Automated Signal Analysis Platform
+    </div>
+  </div>
+
+  <div id="status" class="status ready">
+    <i></i>
+    <span>READY</span>
+  </div>
+
+</header>
+
+
+<div class="content">
+
+
+<!-- =========================================================
+     OVERVIEW
+========================================================= -->
+
+<section id="overview">
+
+  <div class="hero">
+
+    <div>
+
+      <h1>
+        Signal Overview
+      </h1>
+
+      <p>
+        Upload an IQ or WAV capture to estimate signal
+        parameters, noise/SNR, modulation candidates and
+        recovered digital information.
+      </p>
+
+    </div>
+
+    <div class="hero-meta">
+      <span class="chip">DSP validated</span>
+      <span class="chip">ML classifier</span>
+      <span class="chip">Demodulation</span>
+      <span class="chip">v16.0</span>
+    </div>
+
+  </div>
+
+
+  <div class="card upload">
+
+    <div class="upload-grid">
+
+      <div id="drop" class="drop">
+
+        <label class="choose" for="file">
+          Choose signal
+        </label>
+
+        <input
+          id="file"
+          type="file"
+          accept=".iq,.wav,.bin"
+        >
+
+        <span id="fileName" class="file-name">
+          No file selected
+        </span>
+
+      </div>
+
+
+      <div class="field">
+
+        <label>
+          Sample rate (Hz)
+        </label>
+
+        <input
+          id="fs"
+          type="number"
+          value="1000000"
+          step="1"
+        >
+
+      </div>
+
+
+      <div class="field">
+
+        <label>
+          Data type
+        </label>
+
+        <select id="dtype">
+
+          <option>float32</option>
+          <option>float64</option>
+          <option>int16</option>
+          <option>int8</option>
+
+        </select>
+
+      </div>
+
+
+      <div class="field">
+
+        <label>
+          IQ format
+        </label>
+
+        <select id="iq">
+
+          <option>IQ</option>
+          <option>QI</option>
+          <option>REAL</option>
+
+        </select>
+
+      </div>
+
+
+      <button id="go" class="primary">
+        Analyze Signal
+      </button>
+
+
+      <div class="file-hint">
+
+        Supported: raw IQ (float32 / float64 / int16 / int8)
+        and WAV. Set the correct sample rate and IQ layout
+        before analysis.
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <div class="metrics">
+
+    <div class="card metric primary-metric">
+      <div class="label">Detected modulation</div>
+      <div id="mod" class="value">—</div>
+    </div>
+
+    <div class="card metric">
+      <div class="label">Confidence</div>
+      <div id="conf" class="value">—</div>
+    </div>
+
+    <div class="card metric">
+      <div class="label">SNR</div>
+      <div id="snr" class="value">—</div>
+    </div>
+
+    <div class="card metric">
+      <div class="label">Dominant frequency</div>
+      <div id="freq" class="value">—</div>
+    </div>
+
+    <div class="card metric">
+      <div class="label">Samples</div>
+      <div id="samples" class="value">—</div>
+    </div>
+
+    <div class="card metric">
+      <div class="label">Sample rate</div>
+      <div id="rate" class="value">—</div>
+    </div>
+
+    <div class="card metric">
+      <div class="label">Duration</div>
+      <div id="dur" class="value">—</div>
+    </div>
+
+    <div class="card metric">
+      <div class="label">Bandwidth</div>
+      <div id="bw" class="value">—</div>
+    </div>
+
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     MODULATION
+========================================================= -->
+
+<section id="modulation">
+
+  <div class="section-title">
+
+    <h2>
+      Modulation Assessment
+    </h2>
+
+    <span>
+      Ranked probabilities from the trained classifier
+    </span>
+
+  </div>
+
+
+  <div class="card candidates">
+
+    <div id="cand" class="cand">
+
+      <div class="empty">
+        Analyze a signal to classify it.
+      </div>
+
+    </div>
+
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     VISUALS
+========================================================= -->
+
+<section id="visuals">
+
+  <div class="section-title">
+
+    <h2>
+      Visual Signal Analysis
+    </h2>
+
+    <span>
+      Measured signal representations
+    </span>
+
+  </div>
+
+
+  <div class="plots">
+
+    <div class="card plot-card">
+
+      <div class="plot-head">
+
+        <h3>
+          Power Spectrum
+        </h3>
+
+        <span>
+          PSD / frequency domain
+        </span>
+
+      </div>
+
+      <div id="spectrum" class="plot"></div>
+
+    </div>
+
+
+    <div class="card plot-card">
+
+      <div class="plot-head">
+
+        <h3>
+          IQ Constellation
+        </h3>
+
+        <span>
+          In-phase / quadrature
+        </span>
+
+      </div>
+
+      <div id="constellation" class="plot"></div>
+
+    </div>
+
+  </div>
+
+
+  <div
+    class="card plot-card wide"
+    style="margin-top:14px"
+  >
+
+    <div class="plot-head">
+
+      <h3>
+        Waterfall Spectrogram
+      </h3>
+
+      <span>
+        Frequency occupancy over time
+      </span>
+
+    </div>
+
+    <div id="waterfall" class="plot"></div>
+
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     PARAMETERS
+========================================================= -->
+
+<section id="parameters">
+
+  <div class="section-title">
+
+    <h2>
+      Estimated Parameters
+    </h2>
+
+    <span>
+      Calculated from the measured signal
+    </span>
+
+  </div>
+
+
+  <div class="card table-card">
+
+    <div class="subhead">
+      Signal & spectral measurements
+    </div>
+
+    <table>
+
+      <tbody id="params">
+
+        <tr>
+          <td>Global spectral peak</td>
+          <td>—</td>
+        </tr>
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     NOISE
+========================================================= -->
+
+<section id="noise">
+
+  <div class="section-title">
+
+    <h2>
+      Noise & SNR Analysis
+    </h2>
+
+    <span>
+      Robust spectral noise-floor estimation
+    </span>
+
+  </div>
+
+
+  <div class="card table-card">
+
+    <div class="noise-grid">
+
+      <div class="noise-box">
+
+        <label>
+          Noise floor
+        </label>
+
+        <b id="noiseFloorTop">
+          —
+        </b>
+
+      </div>
+
+
+      <div class="noise-box">
+
+        <label>
+          Total noise power
+        </label>
+
+        <b id="noisePowerTop">
+          —
+        </b>
+
+      </div>
+
+
+      <div class="noise-box">
+
+        <label>
+          Total-power SNR
+        </label>
+
+        <b id="snrTop">
+          —
+        </b>
+
+      </div>
+
+
+      <div class="noise-box">
+
+        <label>
+          In-band SNR
+        </label>
+
+        <b id="inbandTop">
+          —
+        </b>
+
+      </div>
+
+    </div>
+
+
+    <table>
+
+      <tbody id="noiseParams"></tbody>
+
+    </table>
+
+
+    <div
+      class="callout"
+      id="noiseNote"
+      style="margin-top:14px"
+    >
+
+      <strong>Method:</strong>
+
+      Noise is estimated from the spectral floor after
+      robust signal-region rejection. It is not inferred
+      from the filename.
+
+    </div>
+
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     DIGITAL SIGNAL ANALYSIS
+========================================================= -->
+
+<section id="digital">
+
+  <div class="section-title">
+
+    <h2>
+      Digital Signal Analysis
+    </h2>
+
+    <span>
+      Demodulation, recovered bits, FEC and interleaving evidence
+    </span>
+
+  </div>
+
+
+  <div class="digital-grid">
+
+
+    <!-- =====================================================
+         DEMODULATION
+    ====================================================== -->
+
+    <div class="card digital-card">
+
+      <div class="digital-title">
+
+        <h3>
+          Demodulation
+        </h3>
+
+        <span id="demodStatus">
+          Waiting for analysis
+        </span>
+
+      </div>
+
+
+      <div class="digital-metrics">
+
+
+        <div class="digital-metric">
+
+          <label>
+            Modulation
+          </label>
+
+          <b id="demodMod">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Symbol rate
+          </label>
+
+          <b id="symbolRate">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Samples / symbol
+          </label>
+
+          <b id="sps">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Symbols recovered
+          </label>
+
+          <b id="symbolsRecovered">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Bits recovered
+          </label>
+
+          <b id="bitsRecovered">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            0 / 1 distribution
+          </label>
+
+          <b id="bitBalance">
+            —
+          </b>
+
+        </div>
+
+
+      </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         FEC
+    ====================================================== -->
+
+    <div class="card digital-card">
+
+      <div class="digital-title">
+
+        <h3>
+          FEC Analysis
+        </h3>
+
+        <span id="fecStatus">
+          Waiting for analysis
+        </span>
+
+      </div>
+
+
+      <div class="digital-metrics">
+
+
+        <div class="digital-metric">
+
+          <label>
+            Evidence
+          </label>
+
+          <b id="fecEvidence">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Confidence
+          </label>
+
+          <b id="fecConfidence">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Parity evidence
+          </label>
+
+          <b id="parityEvidence">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Repetition
+          </label>
+
+          <b id="repetitionEvidence">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Copy agreement
+          </label>
+
+          <b id="copyAgreement">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Hamming evidence
+          </label>
+
+          <b id="hammingEvidence">
+            —
+          </b>
+
+        </div>
+
+
+      </div>
+
+
+      <div class="evidence">
+
+        <label>
+          Possible code rates
+        </label>
+
+        <div
+          id="codeRates"
+          class="code-rates"
+        >
+          <span class="empty">
+            —
+          </span>
+        </div>
+
+      </div>
+
+
+      <div class="evidence">
+
+        <label>
+          Evidence reasons
+        </label>
+
+        <ul
+          id="fecReasons"
+          class="reason-list"
+        >
+
+          <li>
+            No FEC evidence available.
+          </li>
+
+        </ul>
+
+      </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         BITSTREAM
+    ====================================================== -->
+
+    <div class="card digital-card full">
+
+      <div class="digital-title">
+
+        <h3>
+          Recovered Bitstream
+        </h3>
+
+        <button
+          id="copyBits"
+          class="copy-btn"
+          type="button"
+          disabled
+        >
+          Copy Bitstream
+        </button>
+
+      </div>
+
+
+      <div class="bitstream-wrap">
+
+        <div
+          id="bitstream"
+          class="bitstream"
+        >
+          No recovered bitstream available.
+        </div>
+
+      </div>
+
+
+      <div class="bitstream-meta">
+
+        <span id="bitstreamInfo">
+          0 bits
+        </span>
+
+        <span>
+          Displayed directly from demodulator output
+        </span>
+
+      </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         INTERLEAVING
+    ====================================================== -->
+
+    <div class="card digital-card full">
+
+      <div class="digital-title">
+
+        <h3>
+          Interleaving Analysis
+        </h3>
+
+        <span id="interleavingStatus">
+          Waiting for analysis
+        </span>
+
+      </div>
+
+
+      <div class="digital-metrics">
+
+
+        <div class="digital-metric">
+
+          <label>
+            Evidence
+          </label>
+
+          <b id="interleavingEvidence">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Confidence
+          </label>
+
+          <b id="interleavingConfidence">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Transition rate
+          </label>
+
+          <b id="transitionRate">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Mean run length
+          </label>
+
+          <b id="meanRun">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Max run length
+          </label>
+
+          <b id="maxRun">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Strongest lag
+          </label>
+
+          <b id="strongestLag">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Correlation
+          </label>
+
+          <b id="correlation">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Periodicity score
+          </label>
+
+          <b id="periodicity">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Block variation
+          </label>
+
+          <b id="blockVariation">
+            —
+          </b>
+
+        </div>
+
+
+      </div>
+
+
+      <div class="disclaimer">
+
+        <strong>Interpretation:</strong>
+
+        Statistical evidence only. Interleaving cannot be
+        proven from an arbitrary bitstream without framing,
+        coding, or known-reference information.
+
+      </div>
+
+
+
+    <!-- =====================================================
+         DEINTERLEAVING
+    ====================================================== -->
+
+    <div class="card digital-card full">
+
+      <div class="digital-title">
+
+        <h3>
+          Deinterleaving
+        </h3>
+
+        <span id="deinterleavingStatus">
+          Not requested
+        </span>
+
+      </div>
+
+
+      <div class="evidence">
+
+        <label>
+          Deinterleaving method
+        </label>
+
+        <select
+          id="deinterleave"
+          style="width:100%;"
+        >
+
+          <option value="none">
+            None
+          </option>
+
+          <option value="block">
+            Block
+          </option>
+
+          <option value="convolutional">
+            Convolutional
+          </option>
+
+          <option value="diagonal">
+            Diagonal
+          </option>
+
+          <option value="pseudo-random">
+            Pseudo-Random
+          </option>
+
+        </select>
+
+      </div>
+
+
+      <div class="digital-metrics">
+
+        <div class="digital-metric">
+          <label>Method</label>
+          <b id="deinterleavingType">None</b>
+        </div>
+
+        <div class="digital-metric">
+          <label>Input bits</label>
+          <b id="deinterleavingInputBits">—</b>
+        </div>
+
+        <div class="digital-metric">
+          <label>Output bits</label>
+          <b id="deinterleavingOutputBits">—</b>
+        </div>
+
+      </div>
+
+
+      <div class="evidence">
+
+        <label>
+          Recovered Deinterleaved Bitstream
+        </label>
+
+        <div
+          id="deinterleavedBitstream"
+          class="bitstream"
+        >
+          No deinterleaving requested.
+        </div>
+
+      </div>
+
+
+      <div class="disclaimer">
+
+        <strong>Note:</strong>
+
+        Deinterleaving is applied to the recovered demodulated
+        bitstream using the selected deterministic method.
+        The default parameters are Block: 8 rows,
+        Convolutional: 4 branches / 3 delay,
+        Diagonal: 8 rows, and Pseudo-Random: seed 42.
+
+      </div>
+
+    </div>
+    </div>
+
+
+  </div>
+
+</section>
+
+
+<div class="footer-note">
+
+  SPECTRA reports measured estimates and classifier confidence.
+  Unsupported or ambiguous conditions should remain uncertain
+  rather than being forced into a classification.
+
+</div>
+
+
+</div>
+</main>
+</div>
+
+
+<script>
+
+/* ============================================================
+   BASIC HELPERS
+============================================================ */
+
+const $ = x => document.getElementById(x);
+
+const set = (id,v) => {
+  const el = $(id);
+  if(el) el.textContent = v;
+};
+
+function num(v,d=2){
+
+  return Number.isFinite(Number(v))
+    ? Number(v).toFixed(d)
+    : '—';
+
+}
+
+function hz(v){
+
+  return Number.isFinite(Number(v))
+    ? Number(v).toLocaleString(
+        undefined,
+        {
+          maximumFractionDigits:2
+        }
+      ) + ' Hz'
+    : '—';
+
+}
+
+function db(v){
+
+  return Number.isFinite(Number(v))
+    ? Number(v).toFixed(2) + ' dB'
+    : '—';
+
+}
+
+function pct(v){
+
+  return Number.isFinite(Number(v))
+    ? Number(v).toFixed(2) + '%'
+    : '—';
+
+}
+
+function row(a,b){
+
+  return `
+    <tr>
+      <td>${a}</td>
+      <td>${b}</td>
+    </tr>
+  `;
+
+}
+
+function setStatus(type,text){
+
+  const s = $('status');
+
+  s.className = 'status ' + type;
+
+  s.innerHTML =
+    `<i></i><span>${text}</span>`;
+
+}
+
+
+/* ============================================================
+   FILE UI
+============================================================ */
+
+function updateFileName(){
+
+  const f = $('file').files[0];
+
+  set(
+    'fileName',
+    f
+      ? `${f.name} • ${(f.size/1024).toFixed(1)} KB`
+      : 'No file selected'
+  );
+
+}
+
+$('file').addEventListener(
+  'change',
+  updateFileName
+);
+
+
+const drop = $('drop');
+
+[
+  'dragenter',
+  'dragover'
+].forEach(
+  e => drop.addEventListener(
+    e,
+    x => {
+      x.preventDefault();
+      drop.classList.add('drag');
+    }
+  )
+);
+
+
+[
+  'dragleave',
+  'drop'
+].forEach(
+  e => drop.addEventListener(
+    e,
+    x => {
+      x.preventDefault();
+      drop.classList.remove('drag');
+    }
+  )
+);
+
+
+drop.addEventListener(
+  'drop',
+  e => {
+
+    const files =
+      e.dataTransfer.files;
+
+    if(files.length){
+
+      $('file').files = files;
+
+      updateFileName();
+
+    }
+
+  }
+);
+
+
+/* ============================================================
+   DIGITAL RESET
+============================================================ */
+
+function resetDigital(){
+
+  set('demodStatus','Waiting for analysis');
+
+  set('demodMod','—');
+  set('symbolRate','—');
+  set('sps','—');
+  set('symbolsRecovered','—');
+  set('bitsRecovered','—');
+  set('bitBalance','—');
+
+  set('fecStatus','Waiting for analysis');
+
+  set('fecEvidence','—');
+  set('fecConfidence','—');
+  set('parityEvidence','—');
+  set('repetitionEvidence','—');
+  set('copyAgreement','—');
+  set('hammingEvidence','—');
+
+  set(
+    'codeRates',
+    '<span class="empty">—</span>'
+  );
+
+  $('fecReasons').innerHTML =
+    '<li>No FEC evidence available.</li>';
+
+  set(
+    'bitstream',
+    'No recovered bitstream available.'
+  );
+
+  set(
+    'bitstreamInfo',
+    '0 bits'
+  );
+
+  $('copyBits').disabled = true;
+
+  set(
+    'interleavingStatus',
+    'Waiting for analysis'
+  );
+
+  set('interleavingEvidence','—');
+  set('interleavingConfidence','—');
+  set('transitionRate','—');
+  set('meanRun','—');
+  set('maxRun','—');
+  set('strongestLag','—');
+  set('correlation','—');
+  set('periodicity','—');
+  set('blockVariation','—');
+
+  set(
+    'deinterleavingStatus',
+    'Not requested'
+  );
+
+  set(
+    'deinterleavingType',
+    'None'
+  );
+
+  set(
+    'deinterleavingInputBits',
+    '—'
+  );
+
+  set(
+    'deinterleavingOutputBits',
+    '—'
+  );
+
+  set(
+    'deinterleavedBitstream',
+    'No deinterleaving requested.'
+  );
+
+}
+
+
+/* ============================================================
+   EVIDENCE HELPERS
+============================================================ */
+
+function evidenceClass(value){
+
+  const v =
+    String(value || '').toUpperCase();
+
+  if(v === 'LIKELY')
+    return 'good';
+
+  if(v === 'POSSIBLE')
+    return 'warn';
+
+  return 'neutral';
+
+}
+
+
+function evidencePill(value){
+
+  const cls =
+    evidenceClass(value);
+
+  return `
+    <span class="status-pill ${cls}">
+      ${value || '—'}
+    </span>
+  `;
+
+}
+
+
+/* ============================================================
+   DIGITAL RENDERING
+============================================================ */
+
+function renderDigital(d){
+
+  resetDigital();
+
+
+  /* ----------------------------------------------------------
+     DEMODULATION
+  ---------------------------------------------------------- */
+
+  const demod =
+    d.demodulation || {};
+
+  if(demod.available){
+
+    set(
+      'demodStatus',
+      'Demodulation complete'
+    );
+
+    set(
+      'demodMod',
+      demod.modulation || '—'
+    );
+
+    set(
+      'symbolRate',
+      Number.isFinite(
+        Number(demod.symbol_rate)
+      )
+        ? Number(
+            demod.symbol_rate
+          ).toLocaleString() + ' Sym/s'
+        : '—'
+    );
+
+    set(
+      'sps',
+      num(
+        demod.samples_per_symbol,
+        2
+      )
+    );
+
+    set(
+      'symbolsRecovered',
+      Number(
+        demod.symbols_recovered || 0
+      ).toLocaleString()
+    );
+
+    set(
+      'bitsRecovered',
+      Number(
+        demod.bits_recovered || 0
+      ).toLocaleString()
+    );
+
+    set(
+      'bitBalance',
+      `${num(demod.zero_percentage,2)}% / ${num(demod.one_percentage,2)}%`
+    );
+
+
+    /* --------------------------------------------------------
+       BITSTREAM
+    -------------------------------------------------------- */
+
+    const bits =
+      String(
+        demod.bitstream || ''
+      );
+
+    if(bits.length){
+
+      set(
+        'bitstream',
+        bits
+      );
+
+      set(
+        'bitstreamInfo',
+        `${bits.length.toLocaleString()} bits`
+      );
+
+      $('copyBits').disabled = false;
+
+    }else{
+
+      set(
+        'bitstream',
+        'Demodulation completed, but no bitstream was recovered.'
+      );
+
+      set(
+        'bitstreamInfo',
+        '0 bits'
+      );
+
+    }
+
+  }else{
+
+    set(
+      'demodStatus',
+      demod.reason || 'Demodulation unavailable'
+    );
+
+  }
+
+
+  /* ----------------------------------------------------------
+     FEC
+  ---------------------------------------------------------- */
+
+  const fec =
+    d.fec || {};
+
+  if(fec.available){
+
+    set(
+      'fecStatus',
+      'Analysis complete'
+    );
+
+
+    const fecEvidence =
+      String(
+        fec.fec_evidence || 'NONE'
+      );
+
+    $('fecEvidence').innerHTML =
+      evidencePill(
+        fecEvidence
+      );
+
+
+    set(
+      'fecConfidence',
+      pct(fec.confidence)
+    );
+
+
+    set(
+      'parityEvidence',
+      num(
+        fec.parity_evidence,
+        4
+      )
+    );
+
+
+    set(
+      'repetitionEvidence',
+      num(
+        fec.repetition_evidence,
+        4
+      )
+    );
+
+
+    set(
+      'copyAgreement',
+      num(
+        fec.copy_agreement,
+        4
+      )
+    );
+
+
+    set(
+      'hammingEvidence',
+      num(
+        fec.hamming_syndrome_evidence,
+        4
+      )
+    );
+
+
+    /* --------------------------------------------------------
+       CODE RATES
+    -------------------------------------------------------- */
+
+    const rates =
+      Array.isArray(
+        fec.code_rate_candidates
+      )
+        ? fec.code_rate_candidates
+        : [];
+
+    if(rates.length){
+
+      $('codeRates').innerHTML =
+        rates
+          .map(
+            r =>
+              `<span class="rate-chip">${r}</span>`
+          )
+          .join('');
+
+    }else{
+
+      $('codeRates').innerHTML =
+        '<span class="empty">None identified</span>';
+
+    }
+
+
+    /* --------------------------------------------------------
+       REASONS
+    -------------------------------------------------------- */
+
+    const reasons =
+      Array.isArray(
+        fec.evidence_reasons
+      )
+        ? fec.evidence_reasons
+        : [];
+
+    if(reasons.length){
+
+      $('fecReasons').innerHTML =
+        reasons
+          .map(
+            r => `<li>${r}</li>`
+          )
+          .join('');
+
+    }else{
+
+      $('fecReasons').innerHTML =
+        '<li>No strong FEC evidence.</li>';
+
+    }
+
+  }else{
+
+    set(
+      'fecStatus',
+      fec.reason || 'FEC unavailable'
+    );
+
+  }
+
+
+  /* ----------------------------------------------------------
+     INTERLEAVING
+  ---------------------------------------------------------- */
+
+  const inter =
+    d.interleaving || {};
+
+  if(inter.available){
+
+    const evidence =
+      String(
+        inter.interleaving_evidence ||
+        'NONE'
+      );
+
+
+    set(
+      'interleavingStatus',
+      'Analysis complete'
+    );
+
+
+    $('interleavingEvidence').innerHTML =
+      evidencePill(
+        evidence
+      );
+
+
+    set(
+      'interleavingConfidence',
+      pct(
+        inter.confidence
+      )
+    );
+
+
+    set(
+      'transitionRate',
+      pct(
+        inter.transition_percentage
+      )
+    );
+
+
+    set(
+      'meanRun',
+      num(
+        inter.mean_run_length,
+        3
+      )
+    );
+
+
+    set(
+      'maxRun',
+      Number.isFinite(
+        Number(inter.max_run_length)
+      )
+        ? Number(
+            inter.max_run_length
+          ).toLocaleString()
+        : '—'
+    );
+
+
+    set(
+      'strongestLag',
+      Number.isFinite(
+        Number(inter.strongest_lag)
+      )
+        ? Number(
+            inter.strongest_lag
+          ).toLocaleString()
+        : '—'
+    );
+
+
+    set(
+      'correlation',
+      num(
+        inter.strongest_correlation,
+        4
+      )
+    );
+
+
+    set(
+      'periodicity',
+      num(
+        inter.periodicity_score,
+        4
+      )
+    );
+
+
+    set(
+      'blockVariation',
+      num(
+        inter.block_balance_variation,
+        4
+      )
+    );
+
+  }else{
+
+    set(
+      'interleavingStatus',
+      inter.reason ||
+      'Interleaving unavailable'
+    );
+
+  }
+
+
+  /* ----------------------------------------------------------
+     DEINTERLEAVING
+  ---------------------------------------------------------- */
+
+  const deinter =
+    d.deinterleaving || {};
+
+  if(
+    deinter.available &&
+    deinter.success
+  ){
+
+    set(
+      'deinterleavingStatus',
+      'Deinterleaving complete'
+    );
+
+    set(
+      'deinterleavingType',
+      deinter.type || '—'
+    );
+
+    set(
+      'deinterleavingInputBits',
+      Number(
+        deinter.input_bits || 0
+      ).toLocaleString()
+    );
+
+    set(
+      'deinterleavingOutputBits',
+      Number(
+        deinter.output_bits || 0
+      ).toLocaleString()
+    );
+
+    set(
+      'deinterleavedBitstream',
+      deinter.bitstream ||
+      'No output bitstream.'
+    );
+
+  }else{
+
+    set(
+      'deinterleavingStatus',
+      deinter.reason ||
+      'Not requested'
+    );
+
+    set(
+      'deinterleavingType',
+      deinter.type || 'None'
+    );
+
+    set(
+      'deinterleavingInputBits',
+      '—'
+    );
+
+    set(
+      'deinterleavingOutputBits',
+      '—'
+    );
+
+    set(
+      'deinterleavedBitstream',
+      deinter.reason ||
+      'No deinterleaving requested.'
+    );
+
+  }
+
+}
+
+
+/* ============================================================
+   COPY BITSTREAM
+============================================================ */
+
+$('copyBits').addEventListener(
+  'click',
+  async () => {
+
+    const text =
+      $('bitstream').textContent.trim();
+
+    if(
+      !text ||
+      text.startsWith(
+        'No recovered'
+      )
+    ){
+      return;
+    }
+
+    try{
+
+      await navigator.clipboard.writeText(
+        text
+      );
+
+      const btn =
+        $('copyBits');
+
+      const old =
+        btn.textContent;
+
+      btn.textContent =
+        'Copied';
+
+      setTimeout(
+        () => {
+          btn.textContent = old;
+        },
+        1200
+      );
+
+    }catch(err){
+
+      alert(
+        'Unable to copy the bitstream.'
+      );
+
+    }
+
+  }
+);
+
+
+/* ============================================================
+   ANALYZE
+============================================================ */
+
+$('go').onclick = async () => {
+
+  const f =
+    $('file').files[0];
+
+  if(!f){
+
+    return alert(
+      'Choose an IQ or WAV file first.'
+    );
+
+  }
+
+
+  setStatus(
+    'busy',
+    'ANALYZING'
+  );
+
+  $('go').disabled = true;
+
+  $('go').innerHTML =
+    '<span class="spinner"></span> Analyzing…';
+
+
+  const fd =
+    new FormData();
+
+  fd.append(
+    'file',
+    f
+  );
+
+  fd.append(
+    'sample_rate',
+    $('fs').value
+  );
+
+  fd.append(
+    'dtype',
+    $('dtype').value
+  );
+
+  fd.append(
+    'iq_format',
+    $('iq').value
+  );
+
+
+  fd.append(
+    'deinterleave_mode',
+    $('deinterleave').value
+  );
+
+  fd.append(
+    'deinterleave_rows',
+    '8'
+  );
+
+  fd.append(
+    'deinterleave_branches',
+    '4'
+  );
+
+  fd.append(
+    'deinterleave_delay',
+    '3'
+  );
+
+  fd.append(
+    'deinterleave_seed',
+    '42'
+  );
+
+
+  try{
+
+    const r =
+      await fetch(
+        '/api/analyze',
+        {
+          method:'POST',
+          body:fd
+        }
+      );
+
+
+    const d =
+      await r.json();
+
+
+    if(!r.ok){
+
+      throw Error(
+        d.detail ||
+        'Analysis failed'
+      );
+
+    }
+
+
+    const c =
+      d.classification || {};
+
+    const p =
+      d.parameters || {};
+
+
+    /* --------------------------------------------------------
+       OVERVIEW METRICS
+    -------------------------------------------------------- */
+
+    set(
+      'mod',
+      c.detected || 'Unknown'
+    );
+
+
+    set(
+      'conf',
+      Number.isFinite(
+        Number(c.confidence)
+      )
+        ? Number(
+            c.confidence
+          ).toFixed(1) + '%'
+        : '—'
+    );
+
+
+    set(
+      'snr',
+      db(d.snr_db)
+    );
+
+
+    set(
+      'freq',
+      hz(d.dominant_frequency)
+    );
+
+
+    set(
+      'samples',
+      Number(
+        d.samples || 0
+      ).toLocaleString()
+    );
+
+
+    set(
+      'rate',
+      Number(
+        d.sample_rate || 0
+      ).toLocaleString() +
+      ' Hz'
+    );
+
+
+    set(
+      'dur',
+      num(
+        d.duration,
+        4
+      ) + ' s'
+    );
+
+
+    set(
+      'bw',
+      hz(d.bandwidth)
+    );
+
+
+    /* --------------------------------------------------------
+       CLASSIFICATION CANDIDATES
+    -------------------------------------------------------- */
+
+    $('cand').innerHTML =
+      (c.candidates || [])
+        .map(
+          x => {
+
+            const q =
+              Math.min(
+                100,
+                Math.max(
+                  0,
+                  Number(
+                    x.probability
+                  ) || 0
+                )
+              );
+
+            return `
+              <div class="candidate">
+
+                <div class="name">
+                  ${x.modulation}
+                </div>
+
+                <div class="track">
+
+                  <div
+                    class="fill"
+                    style="width:${q}%"
+                  ></div>
+
+                </div>
+
+                <div class="pct">
+                  ${q.toFixed(2)}%
+                </div>
+
+              </div>
+            `;
+
+          }
+        )
+        .join('')
+      ||
+      '<div class="empty">No classification available.</div>';
+
+
+    /* --------------------------------------------------------
+       PARAMETERS
+    -------------------------------------------------------- */
+
+    $('params').innerHTML =
+
+      row(
+        'Global spectral peak',
+        hz(
+          p.global_spectral_peak_hz
+        )
+      )
+
+      +
+
+      row(
+        'Current-window peak',
+        hz(
+          p.current_window_peak_hz
+        )
+      )
+
+      +
+
+      row(
+        'Occupied bandwidth (−10 dB)',
+        hz(
+          p.occupied_bandwidth_minus10db_hz
+        )
+      )
+
+      +
+
+      row(
+        '99% validated signal-power bandwidth',
+        `${hz(
+          p.validated_occupied_bandwidth_99pct_hz
+        )} (${hz(
+          p.occupied_band_start_hz
+        )} – ${hz(
+          p.occupied_band_end_hz
+        )})`
+      )
+
+      +
+
+      row(
+        'RMS amplitude',
+        num(
+          p.rms_amplitude,
+          5
+        )
+      )
+
+      +
+
+      row(
+        'DC offset magnitude',
+        num(
+          p.dc_offset_magnitude,
+          6
+        )
+      )
+
+      +
+
+      row(
+        'DC offset I',
+        num(
+          p.dc_offset_i,
+          6
+        )
+      )
+
+      +
+
+      row(
+        'DC offset Q',
+        num(
+          p.dc_offset_q,
+          6
+        )
+      )
+
+      +
+
+      row(
+        'Peak amplitude',
+        num(
+          p.peak_amplitude,
+          5
+        )
+      )
+
+      +
+
+      row(
+        'Signal power',
+        num(
+          p.signal_power,
+          6
+        )
+      )
+
+      +
+
+      row(
+        'Center frequency',
+        hz(
+          p.center_frequency_hz
+        )
+      )
+
+      +
+
+      row(
+        'Frequency offset',
+        hz(
+          p.frequency_offset_hz
+        )
+      )
+
+      +
+
+      row(
+        'Symbol-rate candidate',
+        p.symbol_rate_candidate_sym_s
+          ? num(
+              p.symbol_rate_candidate_sym_s,
+              1
+            ) + ' Sym/s'
+          : '—'
+      )
+
+      +
+
+      row(
+        'Analysis windows',
+        Number(
+          p.analysis_windows || 0
+        ).toLocaleString()
+      )
+
+      +
+
+      row(
+        'Validated signal regions',
+        Number(
+          p.validated_signal_regions || 0
+        ).toLocaleString()
+      );
+
+
+    /* --------------------------------------------------------
+       NOISE
+    -------------------------------------------------------- */
+
+    $('noiseParams').innerHTML =
+
+      row(
+        'Spectral noise floor',
+        db(
+          p.noise_floor_db_per_hz
+        )
+      )
+
+      +
+
+      row(
+        'Equivalent noise RMS',
+        num(
+          p.noise_rms_equivalent,
+          6
+        )
+      )
+
+      +
+
+      row(
+        'Total noise power',
+        num(
+          d.noise_power,
+          8
+        )
+      )
+
+      +
+
+      row(
+        'In-band noise power',
+        num(
+          p.noise_power_total,
+          8
+        )
+      )
+
+      +
+
+      row(
+        'Peak-to-noise-floor',
+        db(
+          p.peak_to_noise_floor_db
+        )
+      )
+
+      +
+
+      row(
+        'Total-power SNR',
+        db(
+          p.spectral_snr_db
+        )
+      )
+
+      +
+
+      row(
+        'In-band SNR',
+        db(
+          p.inband_snr_db
+        )
+      );
+
+
+    set(
+      'noiseFloorTop',
+      db(
+        p.noise_floor_db_per_hz
+      )
+    );
+
+
+    set(
+      'noisePowerTop',
+      num(
+        d.noise_power,
+        6
+      )
+    );
+
+
+    set(
+      'snrTop',
+      db(
+        p.spectral_snr_db
+      )
+    );
+
+
+    set(
+      'inbandTop',
+      db(
+        p.inband_snr_db
+      )
+    );
+
+
+    /* --------------------------------------------------------
+       DIGITAL ANALYSIS
+    -------------------------------------------------------- */
+
+    renderDigital(d);
+
+
+    /* --------------------------------------------------------
+       PLOTS
+    -------------------------------------------------------- */
+
+    plot(d);
+
+
+    setStatus(
+      'ready',
+      'ANALYSIS COMPLETE'
+    );
+
+
+    /* Automatically bring the new digital section into view
+       only after successful analysis. */
+
+    setTimeout(
+      () => {
+
+        const digital =
+          $('digital');
+
+        if(digital){
+
+          digital.scrollIntoView({
+            behavior:'smooth',
+            block:'start'
+          });
+
+        }
+
+      },
+      250
+    );
+
+
+  }catch(e){
+
+    setStatus(
+      'error',
+      'ANALYSIS ERROR'
+    );
+
+    alert(
+      e.message
+    );
+
+  }finally{
+
+    $('go').disabled = false;
+
+    $('go').textContent =
+      'Analyze Signal';
+
+  }
+
+};
+
+
+/* ============================================================
+   PLOT LAYOUT
+============================================================ */
+
+function baseLayout(){
+
+  return {
+
+    paper_bgcolor:'transparent',
+
+    plot_bgcolor:'#081721',
+
+    font:{
+      color:'#cfe0e8',
+      family:'Inter, Segoe UI, Arial'
+    },
+
+    margin:{
+      t:10,
+      l:58,
+      r:18,
+      b:48
+    },
+
+    hoverlabel:{
+      bgcolor:'#0b1a25',
+      bordercolor:'#345365',
+      font:{
+        color:'#fff'
+      }
+    },
+
+    xaxis:{
+      gridcolor:'#17313e',
+      zerolinecolor:'#294755'
+    },
+
+    yaxis:{
+      gridcolor:'#17313e',
+      zerolinecolor:'#294755'
+    }
+
+  };
+
+}
+
+
+/* ============================================================
+   PLOTS
+============================================================ */
+
+function plot(d){
+
+  const cfg = {
+
+    responsive:true,
+
+    displaylogo:false,
+
+    modeBarButtonsToRemove:[
+      'lasso2d',
+      'select2d',
+      'autoScale2d'
+    ]
+
+  };
+
+
+  if(d.spectrum){
+
+    const layout =
+      baseLayout();
+
+    layout.xaxis = {
+      ...layout.xaxis,
+      title:'Frequency (Hz)'
+    };
+
+    layout.yaxis = {
+      ...layout.yaxis,
+      title:'PSD (dB/Hz)'
+    };
+
+
+    Plotly.newPlot(
+      'spectrum',
+      [
+        {
+          x:d.spectrum.frequency,
+          y:d.spectrum.power_db,
+          type:'scatter',
+          mode:'lines',
+          line:{
+            width:1.5
+          }
+        }
+      ],
+      layout,
+      cfg
+    );
+
+  }
+
+
+  if(d.constellation){
+
+    const layout =
+      baseLayout();
+
+    layout.xaxis = {
+      ...layout.xaxis,
+      title:'I',
+      scaleanchor:'y'
+    };
+
+    layout.yaxis = {
+      ...layout.yaxis,
+      title:'Q'
+    };
+
+
+    Plotly.newPlot(
+      'constellation',
+      [
+        {
+          x:d.constellation.i,
+          y:d.constellation.q,
+          mode:'markers',
+          type:'scattergl',
+          marker:{
+            size:3,
+            opacity:.72
+          }
+        }
+      ],
+      layout,
+      cfg
+    );
+
+  }
+
+
+  if(d.waterfall){
+
+    const layout =
+      baseLayout();
+
+    layout.xaxis = {
+      ...layout.xaxis,
+      title:'Frequency (Hz)'
+    };
+
+    layout.yaxis = {
+      ...layout.yaxis,
+      title:'Time (s)'
+    };
+
+
+    Plotly.newPlot(
+      'waterfall',
+      [
+        {
+          z:d.waterfall.power_db,
+          x:d.waterfall.frequency,
+          y:d.waterfall.time,
+          type:'heatmap',
+          colorbar:{
+            title:'dB'
+          }
+        }
+      ],
+      layout,
+      cfg
+    );
+
+  }
+
+}
+
+
+/* ============================================================
+   SIDEBAR SCROLL TRACKING
+============================================================ */
+
+const sections =
+  [
+    ...document.querySelectorAll(
+      'section[id]'
+    )
+  ];
+
+const links =
+  [
+    ...document.querySelectorAll(
+      '.nav a'
+    )
+  ];
+
+
+window.addEventListener(
+  'scroll',
+  () => {
+
+    let current =
+      'overview';
+
+    sections.forEach(
+      s => {
+
+        if(
+          window.scrollY >=
+          s.offsetTop - 130
+        ){
+
+          current =
+            s.id;
+
+        }
+
+      }
+    );
+
+
+    links.forEach(
+      a => {
+
+        a.classList.toggle(
+          'active',
+          a.getAttribute('href') ===
+          '#' + current
+        );
+
+      }
+    );
+
+  }
+);
+
+
+/* ============================================================
+   INITIAL STATE
+============================================================ */
+
+resetDigital();
+
+</script>
+
+</body>
+</html>

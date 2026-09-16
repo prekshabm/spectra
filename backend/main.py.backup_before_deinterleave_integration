@@ -1,0 +1,264 @@
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+import numpy as np
+
+from backend.signal_io.loader import load_signal
+from backend.preprocessing.pipeline import preprocess
+from backend.dsp.analysis import analyze_signal
+from backend.ml.classifier import ModulationClassifier
+from backend.demod.demodulator import demodulate
+from backend.analysis.fec import analyze_fec
+from backend.analysis.interleaving import analyze_interleaving
+
+
+# ============================================================
+# PATHS
+# ============================================================
+
+ROOT = Path(__file__).resolve().parents[1]
+
+MODEL = (
+    ROOT
+    / "models"
+    / "modulation_rf.joblib"
+)
+
+
+# ============================================================
+# APP
+# ============================================================
+
+app = FastAPI(
+    title="SPECTRA v16",
+    version="16.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
+
+classifier = ModulationClassifier(
+    MODEL
+)
+
+
+# ============================================================
+# HEALTH
+# ============================================================
+
+@app.get("/api/health")
+def health():
+
+    return {
+        "status": "ok",
+        "version": "16.0",
+        "model_loaded": classifier.loaded
+    }
+
+
+# ============================================================
+# ANALYSIS
+# ============================================================
+
+@app.post("/api/analyze")
+async def analyze(
+    file: UploadFile = File(...),
+    sample_rate: float = Form(1_000_000),
+    dtype: str = Form("float32"),
+    iq_format: str = Form("IQ")
+):
+
+    raw = await file.read()
+
+    try:
+
+        # ----------------------------------------------------
+        # LOAD
+        # ----------------------------------------------------
+
+        sig, fs, meta = load_signal(
+            file.filename,
+            raw,
+            sample_rate,
+            dtype,
+            iq_format
+        )
+
+        # Keep original signal for physical measurements.
+        raw_sig = sig.copy()
+
+        # ----------------------------------------------------
+        # DSP ANALYSIS
+        # ----------------------------------------------------
+
+        result = analyze_signal(
+            raw_sig,
+            fs
+        )
+
+        # ----------------------------------------------------
+        # PREPROCESSING
+        # ----------------------------------------------------
+
+        sig, prep = preprocess(
+            raw_sig
+        )
+
+        # ----------------------------------------------------
+        # ML CLASSIFICATION
+        # ----------------------------------------------------
+
+        features = result["features"]
+
+        cls = classifier.predict(
+            features,
+            sig,
+            fs
+        )
+
+        # Internal ML features are not exposed.
+        result.pop(
+            "features",
+            None
+        )
+
+        # ----------------------------------------------------
+        # DEMODULATION
+        # ----------------------------------------------------
+
+        modulation = cls.get(
+            "detected"
+        )
+
+        demod_result = {
+            "available": False,
+            "reason": "No modulation classification available."
+        }
+
+        fec_result = {
+            "available": False,
+            "reason": "No recovered bitstream available."
+        }
+
+        interleaving_result = {
+            "available": False,
+            "reason": "No recovered bitstream available."
+        }
+
+        if modulation:
+
+            try:
+
+                symbol_rate = (
+                    result
+                    .get("parameters", {})
+                    .get("symbol_rate_candidate_sym_s")
+                )
+
+                demod_result = demodulate(
+                    sig,
+                    modulation,
+                    fs,
+                    symbol_rate
+                )
+
+                demod_result["available"] = True
+
+                # ------------------------------------------------
+                # RECOVERED BITSTREAM
+                # ------------------------------------------------
+
+                bitstream = demod_result.get(
+                    "bitstream",
+                    ""
+                )
+
+                if bitstream:
+
+                    # --------------------------------------------
+                    # FEC
+                    # --------------------------------------------
+
+                    fec_result = analyze_fec(
+                        bitstream
+                    )
+
+                    fec_result["available"] = True
+
+                    # --------------------------------------------
+                    # INTERLEAVING
+                    # --------------------------------------------
+
+                    interleaving_result = analyze_interleaving(
+                        bitstream
+                    )
+
+                    interleaving_result["available"] = True
+
+            except Exception as demod_error:
+
+                demod_result = {
+                    "available": False,
+                    "reason": str(demod_error)
+                }
+
+                fec_result = {
+                    "available": False,
+                    "reason": "Demodulation failed."
+                }
+
+                interleaving_result = {
+                    "available": False,
+                    "reason": "Demodulation failed."
+                }
+
+        # ----------------------------------------------------
+        # FINAL RESPONSE
+        # ----------------------------------------------------
+
+        result.update({
+
+            "classification": cls,
+
+            "demodulation": demod_result,
+
+            "fec": fec_result,
+
+            "interleaving": interleaving_result,
+
+            "preprocessing": prep,
+
+            "source": meta
+
+        })
+
+        return result
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+
+# ============================================================
+# FRONTEND
+# ============================================================
+
+app.mount(
+    "/",
+    StaticFiles(
+        directory=str(
+            ROOT / "frontend"
+        ),
+        html=True
+    ),
+    name="frontend"
+)

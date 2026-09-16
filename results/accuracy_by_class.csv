@@ -1,0 +1,6 @@
+class,files,correct,accuracy_percent
+BPSK,10,10,100.0
+QPSK,10,7,70.0
+2-FSK,10,10,100.0
+4-FSK,10,6,60.0
+16-QAM,10,10,100.0
