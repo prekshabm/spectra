@@ -24,3 +24,6 @@ Use your `QPSK_1000000Hz_10dB.iq`, set sample rate to `1000000`, dtype `float32`
 File parsing → preprocessing → FFT/PSD → bandwidth/SNR/parameter estimation → ML modulation classification → visualization.
 
 The modulation classifier is trained on synthetic BPSK, QPSK, 2-FSK, 4-FSK and 16-QAM examples with randomized SNR, phase and frequency offset. It returns probabilities rather than a hard-coded label.
+
+
+ivbowiR
