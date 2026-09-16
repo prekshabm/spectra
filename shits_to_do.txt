@@ -1,1 +1,45 @@
-
+1)Interleaving Detection
+  Detect presence
+  Identify: Block / Convolutional / Diagonal / Pseudo-Random
+  Confidence/score
+2)Automatic De-interleaving
+  Automatic selection
+  Output de-interleaved bitstream
+3) Bitstream Correlation & De-interleaving Analysis
+  Show before/after bitstream
+  Analyse the de-interleaved stream
+  Correlate bit patterns
+  Identify possible header/payload
+  Display correlation results
+4)FEC(verify and update frontend)
+  Viterbi
+  Reed-Solomon
+  Concatenated codes
+  LDPC
+  BER before/after
+5)Parameter Extraction
+  Sampling-frequency estimation
+  Symbol-rate estimation
+  Samples/symbol estimation
+  Frequency-offset estimation
+  Phase-offset estimation
+  Timing/symbol synchronization
+  Bandwidth estimation
+6)Demodulation
+  Better synchronization/robustness
+  Real-world IQ/WAV validation(ask sir)
+  Optional additional modulation classes
+7)Frontend
+  Replace NONE/POSSIBLE/LIKELY interleaving UI
+  FEC results display
+  (need to add all the extra features now implementing)
+8)Testing:
+  Four interleaving-type test dataset
+  De-interleaving validation
+  Viterbi validation
+  RS validation
+  Concatenated-code validation
+  LDPC validation
+  Different SNR/offset conditions
+  Real IQ/WAV testing
+  Final end-to-end testing
