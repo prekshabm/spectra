@@ -12,6 +12,9 @@ from backend.demod.demodulator import demodulate
 from backend.analysis.fec import analyze_fec
 from backend.analysis.interleaving import analyze_interleaving
 from backend.analysis.bitstream import analyze_bitstream
+from backend.analysis.interleaving_detector import (
+    detect_interleaver_from_reference
+)
 
 from backend.analysis.interleavers import (
     block_deinterleave,
