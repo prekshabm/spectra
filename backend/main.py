@@ -491,7 +491,7 @@ def detect_interleaving_type(
     branches=4,
     delay=3,
     seed=42,
-    min_confidence=0.60
+    min_confidence=0.80
 ):
     """
     Evidence-based automatic interleaving detector.
@@ -950,6 +950,8 @@ async def analyze(
     sample_rate: float = Form(1_000_000),
     dtype: str = Form("float32"),
     iq_format: str = Form("IQ"),
+    reference_bits: str = Form(""),
+
 
     deinterleave_mode: str = Form("none"),
 
@@ -1108,13 +1110,53 @@ async def analyze(
                     # AUTOMATIC INTERLEAVING DETECTION
                     # --------------------------------------------
 
-                    interleaving_result = detect_interleaving_type(
-                        bitstream=bitstream,
-                        rows=deinterleave_rows,
-                        branches=deinterleave_branches,
-                        delay=deinterleave_delay,
-                        seed=deinterleave_seed
-                    )
+                    # --------------------------------------------
+                    # INTERLEAVING DETECTION
+                    # --------------------------------------------
+
+                    if reference_bits.strip():
+
+                        try:
+
+                            interleaving_result = (
+                                detect_interleaver_from_reference(
+                                    reference_bits=reference_bits,
+                                    observed_bits=bitstream,
+                                    rows=deinterleave_rows,
+                                    branches=deinterleave_branches,
+                                    delay=deinterleave_delay,
+                                    seed=deinterleave_seed
+                                )
+                            )
+
+                            interleaving_result["method"] = (
+                                "REFERENCE_CORRELATION"
+                            )
+
+                        except Exception as reference_error:
+
+                            interleaving_result = {
+                                "available": True,
+                                "detected": False,
+                                "type": "NOT_CONFIDENTLY_IDENTIFIED",
+                                "confidence": 0.0,
+                                "method": "REFERENCE_CORRELATION",
+                                "reason": str(reference_error)
+                            }
+
+                    else:
+
+                        interleaving_result = detect_interleaving_type(
+                            bitstream=bitstream,
+                            rows=deinterleave_rows,
+                            branches=deinterleave_branches,
+                            delay=deinterleave_delay,
+                            seed=deinterleave_seed
+                        )
+
+                        interleaving_result["method"] = (
+                            "STRUCTURE_ANALYSIS"
+                        )
 
 
                     # --------------------------------------------
