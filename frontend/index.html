@@ -1978,32 +1978,7 @@ td:last-child{
           Deinterleaving method
         </label>
 
-        <select
-          id="deinterleave"
-          style="width:100%;"
-        >
-
-          <option value="none">
-            None
-          </option>
-
-          <option value="block">
-            Block
-          </option>
-
-          <option value="convolutional">
-            Convolutional
-          </option>
-
-          <option value="diagonal">
-            Diagonal
-          </option>
-
-          <option value="pseudo-random">
-            Pseudo-Random
-          </option>
-
-        </select>
+        
 
       </div>
 
@@ -2270,9 +2245,7 @@ function resetDigital(){
 
   set(
     'interleavingStatus',
-    inter.detected
-      ? 'Interleaving detected'
-      : 'Not confidently identified'
+    'Waiting for analysis'
   );
 
   set('interleavingEvidence','—');
@@ -2891,10 +2864,7 @@ $('go').onclick = async () => {
   );
 
 
-  fd.append(
-    'deinterleave_mode',
-    $('deinterleave').value
-  );
+
 
   fd.append(
     'deinterleave_rows',
