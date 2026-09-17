@@ -2270,7 +2270,9 @@ function resetDigital(){
 
   set(
     'interleavingStatus',
-    'Waiting for analysis'
+    inter.detected
+      ? 'Interleaving detected'
+      : 'Not confidently identified'
   );
 
   set('interleavingEvidence','—');
@@ -2603,10 +2605,9 @@ function renderDigital(d){
   if(inter.available){
 
     const evidence =
-      String(
-        inter.interleaving_evidence ||
-        'NONE'
-      );
+      inter.detected
+        ? (inter.type || 'UNKNOWN')
+        : 'NONE';
 
 
     set(
