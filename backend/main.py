@@ -11,6 +11,7 @@ from backend.ml.classifier import ModulationClassifier
 from backend.demod.demodulator import demodulate
 from backend.analysis.fec import analyze_fec
 from backend.analysis.interleaving import analyze_interleaving
+from backend.analysis.bitstream import analyze_bitstream
 
 from backend.analysis.interleavers import (
     block_deinterleave,
@@ -1071,7 +1072,23 @@ async def analyze(
                     ""
                 )
 
+                bitstream_analysis = {
+                    "available": False,
+                    "reason": "No recovered bitstream available."
+                }
+
                 if bitstream:
+
+                    # --------------------------------------------
+                    # BITSTREAM STRUCTURE ANALYSIS
+                    # --------------------------------------------
+
+                    bitstream_analysis = analyze_bitstream(
+                        bitstream
+                    )
+
+                    bitstream_analysis["available"] = True
+
 
                     # --------------------------------------------
                     # FEC
@@ -1203,6 +1220,8 @@ async def analyze(
             "classification": cls,
 
             "demodulation": demod_result,
+
+            "bitstream_analysis": bitstream_analysis,
 
             "fec": fec_result,
 
