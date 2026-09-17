@@ -104,40 +104,70 @@ def _quadratic_peak(f, p_db, k):
 
 
 def _estimate_symbol_rate(x, fs):
-    """Return a conservative symbol-rate candidate from envelope periodicity."""
-    n = len(x)
-    if n < 256:
-        return None
-    amp = np.abs(x)
-    amp = amp - np.mean(amp)
-    # Downsample only for autocorrelation speed, while retaining periodicity.
-    max_points = 50000
-    step = max(1, n // max_points)
-    a = amp[::step]
-    if len(a) < 128:
-        return None
-    ac = np.correlate(a, a, mode='full')[len(a) - 1:]
-    if ac[0] <= 1e-12:
-        return None
-    ac[:2] = 0
-    # Candidate lags corresponding to 2..200 samples/symbol.
-    max_lag = min(len(ac) - 1, max(4, int(fs / max(1000.0, fs / 2.0))))
-    search = ac[1:min(len(ac), max_lag + 1)]
-    if len(search) < 4:
-        return None
-    peaks, props = find_peaks(search, distance=2, prominence=max(ac[0] * 0.01, 1e-12))
-    if len(peaks) == 0:
-        return None
-    # Prefer the first strong periodic peak; return as a candidate, not a claim.
-    best = peaks[np.argmax(search[peaks])]
-    lag = float(best + 1) * step
-    if lag <= 0:
-        return None
-    rate = fs / lag
-    if not (1e3 <= rate <= fs / 2.0):
-        return None
-    return float(rate)
+    """Estimate symbol rate using squared-signal spectral analysis."""
 
+    n = len(x)
+
+    if n < 1024:
+        return None
+
+    x = np.asarray(x, dtype=np.complex64)
+
+    # Limit computation
+    max_points = 200000
+    x = x[:min(n, max_points)]
+
+    # Remove DC
+    x = x - np.mean(x)
+
+    # Squared-signal transformation
+    z = x ** 2
+
+    # FFT
+    spectrum = np.abs(np.fft.fft(z))
+
+    freq = np.fft.fftfreq(len(z), 1.0 / fs)
+
+    # Search positive frequencies
+    mask = (
+        (freq >= 1e3) &
+        (freq <= fs / 2.0)
+    )
+
+    if not np.any(mask):
+        return None
+
+    spectrum_masked = spectrum[mask]
+    freq_masked = freq[mask]
+
+    # Ignore extremely weak signals
+    peak_index = np.argmax(spectrum_masked)
+
+    peak_power = spectrum_masked[peak_index]
+    median_power = np.median(spectrum_masked)
+
+    if median_power <= 1e-12:
+        return None
+
+    peak_ratio = peak_power / median_power
+
+    # Require a meaningful spectral peak
+    if peak_ratio < 5.0:
+        return None
+
+    peak_frequency = float(
+        freq_masked[peak_index]
+    )
+
+    # For squared BPSK, spectral component ≈ 2 × symbol rate
+    symbol_rate = peak_frequency / 2.0
+
+    if not (
+        1e3 <= symbol_rate <= fs / 2.0
+    ):
+        return None
+
+    return float(symbol_rate)
 
 def analyze_signal(x, fs):
     x = np.asarray(x, dtype=np.complex64)
