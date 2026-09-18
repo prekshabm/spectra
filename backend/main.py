@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MODEL = (
     ROOT
     / "models"
-    / "modulation_rf.joblib"
+    / "modulation_rf_v16_data50_new.joblib"
 )
 
 
