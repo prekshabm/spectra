@@ -2714,10 +2714,27 @@ function renderDigital(d){
         ? fec.code_rate_candidates
         : [];
 
-    if(rates.length){
+    const decoderRate =
+      fec.decoder_details &&
+      fec.decoder_details.rate
+        ? String(
+            fec.decoder_details.rate
+          )
+        : '';
+
+    const displayRates =
+      rates.length
+        ? rates
+        : (
+            decoderRate
+              ? [decoderRate]
+              : []
+          );
+
+    if(displayRates.length){
 
       $('codeRates').innerHTML =
-        rates
+        displayRates
           .map(
             r =>
               `<span class="rate-chip">${r}</span>`
@@ -2727,7 +2744,7 @@ function renderDigital(d){
     }else{
 
       $('codeRates').innerHTML =
-        '<span class="empty">None identified</span>';
+        '<span class="empty">—</span>';
 
     }
 
