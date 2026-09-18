@@ -51,7 +51,6 @@ FEATURES = [
 # ============================================================
 
 def _normalize(x):
-
     x = np.asarray(
         x,
         dtype=np.complex128
@@ -80,7 +79,6 @@ def _extract(x, fs):
     z = _normalize(x)
 
     if len(z) < 64:
-
         return np.zeros(
             len(FEATURES),
             dtype=float
@@ -1225,62 +1223,79 @@ class ModulationClassifier:
             path
         )
 
+        # V18 is the currently selected real-data model.
+        # For V18 we trust the trained Random Forest directly.
+        self.v18_primary = (
+            self.path.name
+            == "modulation_rf_v18_all_training.joblib"
+        )
+
         self.model = None
         self.loaded = False
 
         # ====================================================
-        # QPSK / 16-QAM SPECIALIST
+        # SPECIALISTS
+        # ====================================================
+        #
+        # They are only loaded for the legacy path.
+        # V18 does not use them during prediction.
+        # This keeps V18 classification lighter/faster.
         # ====================================================
 
         self.qpsk_qam_specialist = None
-
-        specialist_path = (
-            self.path.parent
-            / "specialist_qpsk_qam.joblib"
-        )
-
-        if specialist_path.exists():
-
-            try:
-
-                specialist_obj = joblib.load(
-                    specialist_path
-                )
-
-                self.qpsk_qam_specialist = (
-                    specialist_obj["model"]
-                )
-
-            except Exception:
-
-                self.qpsk_qam_specialist = None
-
-        # ====================================================
-        # V17.7 REAL-DATA FSK SPECIALIST
-        # ====================================================
-
         self.fsk_specialist = None
 
-        fsk_specialist_path = (
-            self.path.parent
-            / "specialist_fsk_real.joblib"
-        )
+        if not self.v18_primary:
 
-        if fsk_specialist_path.exists():
+            # ------------------------------------------------
+            # QPSK / 16-QAM specialist
+            # ------------------------------------------------
 
-            try:
+            specialist_path = (
+                self.path.parent
+                / "specialist_qpsk_qam.joblib"
+            )
 
-                fsk_obj = joblib.load(
-                    fsk_specialist_path
-                )
+            if specialist_path.exists():
 
-                self.fsk_specialist = (
-                    fsk_obj["model"]
-                )
+                try:
 
-            except Exception:
+                    specialist_obj = joblib.load(
+                        specialist_path
+                    )
 
-                self.fsk_specialist = None
+                    self.qpsk_qam_specialist = (
+                        specialist_obj["model"]
+                    )
+
+                except Exception:
+
+                    self.qpsk_qam_specialist = None
+
+            # ------------------------------------------------
+            # FSK specialist
+            # ------------------------------------------------
+
+            fsk_specialist_path = (
+                self.path.parent
+                / "specialist_fsk_real.joblib"
+            )
+
+            if fsk_specialist_path.exists():
+
+                try:
+
+                    fsk_obj = joblib.load(
+                        fsk_specialist_path
+                    )
+
+                    self.fsk_specialist = (
+                        fsk_obj["model"]
+                    )
+
+                except Exception:
+
+                    self.fsk_specialist = None
 
         # ====================================================
         # MAIN MODEL
@@ -1330,7 +1345,7 @@ class ModulationClassifier:
     ):
 
         # ----------------------------------------------------
-        # Extract main features
+        # Main feature extraction
         # ----------------------------------------------------
 
         x = _extract(
@@ -1366,6 +1381,75 @@ class ModulationClassifier:
                 rf
             )
         )
+
+        # ====================================================
+        # V18 PRIMARY PATH
+        # ====================================================
+        #
+        # The V18 model was independently tested on:
+        #
+        # validation_50 : 50/50
+        # validation    : 25/25
+        #
+        # So for V18 we use the trained Random Forest
+        # probabilities directly.
+        #
+        # This prevents the older expert/voting/specialist
+        # layers from changing an already validated model
+        # prediction.
+        #
+        # It also reduces classification computation.
+        # ====================================================
+
+        if self.v18_primary:
+
+            order = sorted(
+                CLASSES,
+                key=lambda modulation:
+                    rf_scores.get(
+                        modulation,
+                        0.0
+                    ),
+                reverse=True
+            )
+
+            rows = [
+                {
+                    "modulation": modulation,
+                    "probability":
+                        round(
+                            rf_scores.get(
+                                modulation,
+                                0.0
+                            )
+                            * 100,
+                            2
+                        )
+                }
+                for modulation in order
+            ]
+
+            return {
+                "detected":
+                    rows[0]["modulation"],
+
+                "confidence":
+                    rows[0]["probability"],
+
+                "candidates":
+                    rows,
+
+                "features_used":
+                    FEATURES,
+            }
+
+        # ====================================================
+        # LEGACY MODEL PATH
+        # ====================================================
+        #
+        # The following preserves the previous behaviour for
+        # models other than V18.
+        # ====================================================
 
         # ----------------------------------------------------
         # Physics expert probabilities
@@ -1614,21 +1698,12 @@ class ModulationClassifier:
                 )
 
         # ====================================================
-        # V17.7 REAL-DATA FSK SPECIALIST
-        #
-        # IMPORTANT:
-        # Unlike the old version, this specialist is also
-        # allowed to rescue an FSK sample that the general
-        # classifier incorrectly calls 16-QAM.
+        # FSK SPECIALIST
         # ====================================================
 
         if self.fsk_specialist is not None:
 
             try:
-
-                # ------------------------------------------------
-                # Extract the specialist's 18-feature vector
-                # ------------------------------------------------
 
                 fsk_x = extract_fsk_features(
                     signal,
@@ -1641,10 +1716,6 @@ class ModulationClassifier:
                     posinf=1e6,
                     neginf=-1e6
                 )
-
-                # ------------------------------------------------
-                # Specialist prediction
-                # ------------------------------------------------
 
                 fsk_prob = (
                     self.fsk_specialist
@@ -1730,7 +1801,7 @@ class ModulationClassifier:
                 ) / 3.0
 
                 # ------------------------------------------------
-                # Find current general decision
+                # Current decision
                 # ------------------------------------------------
 
                 top_general = max(
@@ -1739,8 +1810,7 @@ class ModulationClassifier:
                 )
 
                 # =================================================
-                # CASE A:
-                # General classifier already says FSK
+                # CASE A: General classifier already says FSK
                 # =================================================
 
                 if top_general in (
@@ -1771,11 +1841,7 @@ class ModulationClassifier:
                     )
 
                 # =================================================
-                # CASE B:
-                # General classifier says 16-QAM
-                #
-                # Give FSK specialist a controlled chance to
-                # rescue a genuine 4-FSK / 2-FSK sample.
+                # CASE B: General classifier says 16-QAM
                 # =================================================
 
                 elif top_general == "16-QAM":
@@ -1831,7 +1897,8 @@ class ModulationClassifier:
 
             except Exception:
 
-                # Specialist must never crash the main classifier
+                # Specialist must never crash
+                # the main classifier.
                 pass
 
         # ====================================================
