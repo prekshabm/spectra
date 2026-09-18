@@ -5,22 +5,59 @@ import numpy as np
 # SPECTRA — FEC / ERROR-CONTROL ANALYSIS
 # ============================================================
 #
-# Purpose:
-#   Analyze a recovered bitstream for statistical evidence
-#   consistent with error-control coding.
+# PURPOSE
+# -------
+# Analyze a recovered bitstream for evidence of FEC and,
+# when enough information is available, attempt decoding.
 #
-# Important:
-#   This is an evidence detector, NOT a decoder.
+# Required PS FEC families:
 #
-#   It reports:
+#   1. Short-constraint convolutional codes + Viterbi
+#   2. Reed-Solomon block codes
+#   3. Concatenated codes
+#   4. LDPC
 #
-#       NONE
-#       POSSIBLE
-#       LIKELY
+# IMPORTANT
+# ---------
+# A completely unknown RF bitstream does not contain enough
+# information to uniquely determine every possible FEC code.
 #
-#   It does not claim to identify an exact FEC code with
-#   certainty.
+# Therefore SPECTRA:
+#
+#   - measures observable evidence
+#   - tests bounded supported candidates
+#   - validates candidates before claiming them
+#   - decodes only when a candidate can be validated
+#   - otherwise reports uncertainty
+#
+# Existing output states are preserved:
+#
+#   NONE
+#   POSSIBLE
+#   LIKELY
 # ============================================================
+
+
+# ============================================================
+# OPTIONAL DECODER LIBRARIES
+# ============================================================
+
+try:
+    import reedsolo
+
+    REEDSOLO_AVAILABLE = True
+
+except Exception:
+    reedsolo = None
+    REEDSOLO_AVAILABLE = False
+
+
+SUPPORTED_FEC_FAMILIES = [
+    "Convolutional + Viterbi",
+    "Reed-Solomon",
+    "Concatenated",
+    "LDPC",
+]
 
 
 # ============================================================
@@ -28,9 +65,19 @@ import numpy as np
 # ============================================================
 
 def _clean_bits(bits):
-    """Convert a bitstream into a clean uint8 array."""
+    """
+    Convert an input bitstream into a uint8 array containing
+    only 0 and 1.
+    """
+
+    if bits is None:
+        return np.zeros(
+            0,
+            dtype=np.uint8
+        )
 
     if isinstance(bits, str):
+
         bits = [
             int(b)
             for b in bits
@@ -52,12 +99,13 @@ def _clean_bits(bits):
 
 
 # ============================================================
-# BASIC STATISTICS
+# BASIC BIT STATISTICS
 # ============================================================
 
 def _bit_balance(bits):
 
     if len(bits) == 0:
+
         return {
             "zero_percentage": 0.0,
             "one_percentage": 0.0,
@@ -86,19 +134,10 @@ def _bit_balance(bits):
 
 
 # ============================================================
-# SINGLE-PARITY / CHECK-BIT DETECTION
+# PARITY / CHECK-BIT EVIDENCE
 # ============================================================
 
 def _parity_evidence(bits):
-    """
-    Look for a repeated parity/check-bit organization.
-
-    The final bit of each group is treated as a candidate
-    parity bit and compared against XOR parity of the
-    preceding bits.
-
-    A random stream should be close to 50% agreement.
-    """
 
     if len(bits) < 32:
 
@@ -142,8 +181,15 @@ def _parity_evidence(bits):
             group_size
         )
 
-        data = x[:, :-1]
-        parity = x[:, -1]
+        data = x[
+            :,
+            :-1
+        ]
+
+        parity = x[
+            :,
+            -1
+        ]
 
         predicted = (
             np.sum(
@@ -160,14 +206,14 @@ def _parity_evidence(bits):
             )
         )
 
-        # Evidence is distance from random 50%.
         evidence = (
             abs(
                 consistency
                 -
                 0.50
             )
-            * 2.0
+            *
+            2.0
         )
 
         if evidence > best_evidence:
@@ -190,51 +236,39 @@ def _parity_evidence(bits):
 
 
 # ============================================================
-# TRUE REPETITION DETECTION
+# REPETITION EVIDENCE
 # ============================================================
 
 def _repetition_evidence(bits):
-    """
-    Detect repetition coding.
-
-    Supports:
-
-    1. Bit repetition:
-           0 -> 000
-           1 -> 111
-
-    2. Whole-block repetition:
-           payload | payload | payload
-
-    Returns all fields expected by analyze_fec().
-    """
 
     n = len(bits)
 
     if n < 12:
+
         return {
             "best_repeat": None,
             "repetition_score": 0.0,
             "copy_agreement": 0.0,
         }
 
-    bits = np.asarray(
-        bits,
-        dtype=np.uint8
-    )
-
     best_repeat = None
     best_score = 0.0
     best_copy_agreement = 0.0
 
-    # ========================================================
-    # BIT-LEVEL REPETITION
-    # ========================================================
+    # --------------------------------------------------------
+    # Bit-level repetition
+    # --------------------------------------------------------
 
-    for repeat in (2, 3, 4):
+    for repeat in (
+        2,
+        3,
+        4,
+    ):
 
         usable = (
-            n // repeat
+            n
+            //
+            repeat
         ) * repeat
 
         if usable < 12:
@@ -264,20 +298,29 @@ def _repetition_evidence(bits):
             best_repeat = repeat
             best_copy_agreement = score
 
-    # ========================================================
-    # WHOLE-BLOCK REPETITION
-    # ========================================================
+    # --------------------------------------------------------
+    # Whole-block repetition
+    # --------------------------------------------------------
 
-    for repeat in (2, 3, 4):
+    for repeat in (
+        2,
+        3,
+        4,
+    ):
 
-        block_size = n // repeat
+        block_size = (
+            n
+            //
+            repeat
+        )
 
         if block_size < 16:
             continue
 
         usable = (
             block_size
-            * repeat
+            *
+            repeat
         )
 
         x = bits[
@@ -296,7 +339,9 @@ def _repetition_evidence(bits):
 
             agreement = float(
                 np.mean(
-                    x[0] == x[k]
+                    x[0]
+                    ==
+                    x[k]
                 )
             )
 
@@ -318,10 +363,6 @@ def _repetition_evidence(bits):
                 best_repeat = repeat
                 best_copy_agreement = score
 
-    # ========================================================
-    # RANDOM-DATA PROTECTION
-    # ========================================================
-
     if best_score < 0.70:
 
         return {
@@ -333,13 +374,15 @@ def _repetition_evidence(bits):
             ),
         }
 
-    # ========================================================
-    # NORMALIZED EVIDENCE
-    # ========================================================
-
     repetition_score = float(
         np.clip(
-            (best_score - 0.50) / 0.50,
+            (
+                best_score
+                -
+                0.50
+            )
+            /
+            0.50,
             0.0,
             1.0
         )
@@ -361,28 +404,10 @@ def _repetition_evidence(bits):
 
 
 # ============================================================
-# HAMMING (7,4) DETECTION
+# HAMMING-LIKE SUPPORTING EVIDENCE
 # ============================================================
 
 def _hamming74_evidence(bits):
-    """
-    Test whether consecutive 7-bit codewords are consistent
-    with the standard binary Hamming (7,4) parity structure.
-
-    Codeword positions:
-
-        1 2 3 4 5 6 7
-
-    where positions 1, 2 and 4 are parity positions.
-
-    Syndrome:
-
-        s1 = b1 XOR b3 XOR b5 XOR b7
-        s2 = b2 XOR b3 XOR b6 XOR b7
-        s4 = b4 XOR b5 XOR b6 XOR b7
-
-    For a valid codeword, all syndrome bits are zero.
-    """
 
     if len(bits) < 70:
 
@@ -449,13 +474,14 @@ def _hamming74_evidence(bits):
         np.mean(valid)
     )
 
-    # Random 7-bit words have approximately 1/8 valid
-    # syndrome combinations.
     baseline = 1.0 / 8.0
 
     if valid_rate <= baseline:
+
         evidence = 0.0
+
     else:
+
         evidence = (
             valid_rate
             -
@@ -535,14 +561,11 @@ def _block_correlation(bits):
         if n_blocks < 3:
             continue
 
-        usable = (
-            x[
-                :n_blocks * block_size
-            ]
-            .reshape(
-                n_blocks,
-                block_size
-            )
+        usable = x[
+            :n_blocks * block_size
+        ].reshape(
+            n_blocks,
+            block_size
         )
 
         correlations = []
@@ -551,19 +574,20 @@ def _block_correlation(bits):
             n_blocks - 1
         ):
 
-            a = usable[k]
-            b = usable[k + 1]
-
             a = (
-                a
+                usable[k]
                 -
-                np.mean(a)
+                np.mean(
+                    usable[k]
+                )
             )
 
             b = (
-                b
+                usable[k + 1]
                 -
-                np.mean(b)
+                np.mean(
+                    usable[k + 1]
+                )
             )
 
             den = np.sqrt(
@@ -609,7 +633,7 @@ def _block_correlation(bits):
 
 
 # ============================================================
-# CODE-RATE / LENGTH EVIDENCE
+# CODE-RATE / LENGTH CLUES
 # ============================================================
 
 def _length_evidence(bits):
@@ -645,19 +669,1545 @@ def _length_evidence(bits):
 
 
 # ============================================================
-# FINAL CLASSIFICATION
+# GF(256) SUPPORT FOR REED-SOLOMON ANALYSIS
 # ============================================================
 
-def _classify_fec(
+def _gf_tables():
+
+    exp = np.zeros(
+        512,
+        dtype=np.int16
+    )
+
+    log = np.full(
+        256,
+        -1,
+        dtype=np.int16
+    )
+
+    x = 1
+
+    for i in range(255):
+
+        exp[i] = x
+        log[x] = i
+
+        x <<= 1
+
+        if x & 0x100:
+            x ^= 0x11D
+
+    for i in range(
+        255,
+        512
+    ):
+
+        exp[i] = exp[
+            i - 255
+        ]
+
+    return exp, log
+
+
+_GF_EXP, _GF_LOG = _gf_tables()
+
+
+def _gf_mul(a, b):
+
+    a = int(a)
+    b = int(b)
+
+    if a == 0 or b == 0:
+        return 0
+
+    return int(
+        _GF_EXP[
+            int(_GF_LOG[a])
+            +
+            int(_GF_LOG[b])
+        ]
+    )
+
+
+def _gf_pow(a, n):
+
+    if n == 0:
+        return 1
+
+    if a == 0:
+        return 0
+
+    exponent = (
+        int(_GF_LOG[a])
+        *
+        int(n)
+    ) % 255
+
+    return int(
+        _GF_EXP[
+            exponent
+        ]
+    )
+
+
+def _rs_syndromes(codeword, nsym):
+
+    syndromes = []
+
+    for i in range(
+        nsym
+    ):
+
+        root = _GF_EXP[i]
+
+        value = 0
+
+        for byte in codeword:
+
+            value = (
+                _gf_mul(
+                    value,
+                    root
+                )
+                ^
+                int(byte)
+            )
+
+        syndromes.append(
+            value
+        )
+
+    return np.asarray(
+        syndromes,
+        dtype=np.uint8
+    )
+
+
+# ============================================================
+# BITS → BYTES
+# ============================================================
+
+def _bits_to_bytes(bits, offset=0):
+
+    bits = np.asarray(
+        bits,
+        dtype=np.uint8
+    )
+
+    if (
+        offset < 0
+        or
+        offset >= 8
+    ):
+
+        return np.zeros(
+            0,
+            dtype=np.uint8
+        )
+
+    usable = (
+        (
+            len(bits)
+            -
+            offset
+        )
+        //
+        8
+    ) * 8
+
+    if usable <= 0:
+
+        return np.zeros(
+            0,
+            dtype=np.uint8
+        )
+
+    x = bits[
+        offset:
+        offset + usable
+    ].reshape(
+        -1,
+        8
+    )
+
+    weights = np.array(
+        [
+            128,
+            64,
+            32,
+            16,
+            8,
+            4,
+            2,
+            1
+        ],
+        dtype=np.uint16
+    )
+
+    values = (
+        x
+        *
+        weights
+    ).sum(
+        axis=1
+    )
+
+    return values.astype(
+        np.uint8
+    )
+
+
+def _bytes_to_bits(data):
+
+    data = np.asarray(
+        data,
+        dtype=np.uint8
+    )
+
+    if len(data) == 0:
+        return np.zeros(
+            0,
+            dtype=np.uint8
+        )
+
+    bits = np.unpackbits(
+        data
+    )
+
+    return bits.astype(
+        np.uint8
+    )
+
+
+# ============================================================
+# REED-SOLOMON EVIDENCE
+# ============================================================
+
+def _reed_solomon_evidence(bits):
+
+    result = {
+        "available": False,
+        "best_nsym": None,
+        "best_offset": None,
+        "codeword_size": 255,
+        "syndrome_zero_rate": 0.0,
+        "codewords_tested": 0,
+        "valid_codewords": 0,
+        "evidence": 0.0,
+        "decoder_available": REEDSOLO_AVAILABLE,
+    }
+
+    if len(bits) < 2040:
+        return result
+
+    best = None
+
+    for offset in range(8):
+
+        raw = _bits_to_bytes(
+            bits,
+            offset
+        )
+
+        if len(raw) < 255:
+            continue
+
+        usable = (
+            len(raw)
+            //
+            255
+        ) * 255
+
+        codewords = raw[
+            :usable
+        ].reshape(
+            -1,
+            255
+        )
+
+        for nsym in (
+            8,
+            16,
+            24,
+            32,
+        ):
+
+            valid_count = 0
+
+            for codeword in codewords:
+
+                syndrome = _rs_syndromes(
+                    codeword,
+                    nsym
+                )
+
+                if np.all(
+                    syndrome == 0
+                ):
+
+                    valid_count += 1
+
+            total = len(
+                codewords
+            )
+
+            if total == 0:
+                continue
+
+            valid_rate = (
+                valid_count
+                /
+                total
+            )
+
+            # A valid RS codeword must satisfy all checked
+            # syndromes. Even one fully valid codeword is
+            # significant, while multiple valid codewords
+            # provide much stronger evidence.
+            if best is None:
+
+                best = (
+                    valid_rate,
+                    offset,
+                    nsym,
+                    total,
+                    valid_count
+                )
+
+            else:
+
+                if valid_rate > best[0]:
+
+                    best = (
+                        valid_rate,
+                        offset,
+                        nsym,
+                        total,
+                        valid_count
+                    )
+
+    if best is None:
+        return result
+
+    (
+        valid_rate,
+        offset,
+        nsym,
+        total,
+        valid_count
+    ) = best
+
+    if valid_rate >= 0.75:
+
+        evidence = 1.0
+
+    elif valid_rate >= 0.50:
+
+        evidence = 0.80
+
+    elif valid_rate >= 0.25:
+
+        evidence = 0.50
+
+    elif valid_count > 0:
+
+        evidence = 0.25
+
+    else:
+
+        evidence = 0.0
+
+    result.update(
+        {
+            "available": True,
+            "best_nsym": int(nsym),
+            "best_offset": int(offset),
+            "syndrome_zero_rate": round(
+                float(valid_rate),
+                4
+            ),
+            "codewords_tested": int(total),
+            "valid_codewords": int(valid_count),
+            "evidence": round(
+                float(evidence),
+                4
+            ),
+        }
+    )
+
+    return result
+
+
+# ============================================================
+# REED-SOLOMON DECODING
+# ============================================================
+
+def _try_reed_solomon_decode(
     bits,
+    rs_info
+):
+
+    result = {
+        "status": "NOT_ATTEMPTED",
+        "corrected_bits": None,
+        "corrections": 0,
+        "details": {},
+    }
+
+    if not rs_info.get(
+        "available",
+        False
+    ):
+
+        return result
+
+    if not REEDSOLO_AVAILABLE:
+
+        result[
+            "status"
+        ] = "DECODER_LIBRARY_UNAVAILABLE"
+
+        result[
+            "details"
+        ] = {
+            "message":
+                "reedsolo is not installed"
+        }
+
+        return result
+
+    offset = int(
+        rs_info[
+            "best_offset"
+        ]
+    )
+
+    nsym = int(
+        rs_info[
+            "best_nsym"
+        ]
+    )
+
+    raw = _bits_to_bytes(
+        bits,
+        offset
+    )
+
+    if len(raw) < 255:
+
+        result[
+            "status"
+        ] = "INSUFFICIENT_DATA"
+
+        return result
+
+    usable = (
+        len(raw)
+        //
+        255
+    ) * 255
+
+    codewords = raw[
+        :usable
+    ].reshape(
+        -1,
+        255
+    )
+
+    corrected = []
+
+    corrected_count = 0
+    successful = 0
+
+    try:
+
+        codec = reedsolo.RSCodec(
+            nsym,
+            nsize=255
+        )
+
+    except Exception as exc:
+
+        result[
+            "status"
+        ] = "DECODER_INIT_FAILED"
+
+        result[
+            "details"
+        ] = {
+            "message": str(exc)
+        }
+
+        return result
+
+    for codeword in codewords:
+
+        cw = bytes(
+            int(v)
+            for v in codeword
+        )
+
+        try:
+
+            decoded = codec.decode(
+                cw
+            )
+
+            if isinstance(
+                decoded,
+                tuple
+            ):
+
+                message = decoded[0]
+
+            else:
+
+                message = decoded
+
+            message = bytes(
+                message
+            )
+
+            # For display/correction purposes we return
+            # the decoded message bytes, not the encoded
+            # parity bytes.
+            corrected.extend(
+                message
+            )
+
+            successful += 1
+
+        except Exception:
+
+            # Keep original bytes if this codeword cannot
+            # be corrected.
+            corrected.extend(
+                cw
+            )
+
+    if successful == 0:
+
+        result[
+            "status"
+        ] = "FAILED"
+
+        return result
+
+    corrected_array = np.asarray(
+        list(corrected),
+        dtype=np.uint8
+    )
+
+    corrected_bits = _bytes_to_bits(
+        corrected_array
+    )
+
+    result[
+        "status"
+    ] = "SUCCESS"
+
+    result[
+        "corrected_bits"
+    ] = "".join(
+        corrected_bits.astype(
+            str
+        )
+    )
+
+    result[
+        "corrections"
+    ] = corrected_count
+
+    result[
+        "details"
+    ] = {
+        "offset": offset,
+        "nsym": nsym,
+        "codeword_size": 255,
+        "codewords_decoded": int(
+            successful
+        ),
+        "decoder": "Reed-Solomon",
+    }
+
+    return result
+
+
+# ============================================================
+# CONVOLUTIONAL CODE DEFINITIONS
+# ============================================================
+
+CONVOLUTIONAL_CANDIDATES = [
+    {
+        "constraint_length": 3,
+        "generators": (
+            0o7,
+            0o5
+        ),
+        "name":
+            "K=3, generators=(7,5)"
+    },
+    {
+        "constraint_length": 5,
+        "generators": (
+            0o23,
+            0o35
+        ),
+        "name":
+            "K=5, generators=(23,35)"
+    },
+    {
+        "constraint_length": 7,
+        "generators": (
+            0o171,
+            0o133
+        ),
+        "name":
+            "K=7, generators=(171,133)"
+    },
+]
+
+
+def _parity(value):
+
+    return int(
+        value.bit_count()
+        &
+        1
+    )
+
+
+def _conv_next(
+    state,
+    bit,
+    constraint_length,
+    generators
+):
+
+    register = (
+        (
+            state
+            <<
+            1
+        )
+        |
+        int(bit)
+    )
+
+    mask = (
+        1
+        <<
+        constraint_length
+    ) - 1
+
+    register &= mask
+
+    next_state = (
+        register
+        &
+        (
+            (
+                1
+                <<
+                (
+                    constraint_length
+                    -
+                    1
+                )
+            )
+            -
+            1
+        )
+    )
+
+    output = tuple(
+        _parity(
+            register
+            &
+            int(generator)
+        )
+        for generator in generators
+    )
+
+    return (
+        next_state,
+        output
+    )
+
+
+def _conv_encode(
+    bits,
+    constraint_length,
+    generators
+):
+
+    state = 0
+    output = []
+
+    for bit in bits:
+
+        state, encoded = _conv_next(
+            state,
+            int(bit),
+            constraint_length,
+            generators
+        )
+
+        output.extend(
+            encoded
+        )
+
+    return np.asarray(
+        output,
+        dtype=np.uint8
+    )
+
+
+# ============================================================
+# VITERBI DECODER
+# ============================================================
+
+def _viterbi_decode(
+    received,
+    constraint_length,
+    generators
+):
+
+    received = np.asarray(
+        received,
+        dtype=np.uint8
+    )
+
+    n_outputs = len(
+        generators
+    )
+
+    if (
+        n_outputs == 0
+        or
+        len(received)
+        <
+        n_outputs
+    ):
+
+        return (
+            None,
+            np.inf
+        )
+
+    usable = (
+        len(received)
+        //
+        n_outputs
+    ) * n_outputs
+
+    received = received[
+        :usable
+    ]
+
+    steps = (
+        len(received)
+        //
+        n_outputs
+    )
+
+    n_states = (
+        1
+        <<
+        (
+            constraint_length
+            -
+            1
+        )
+    )
+
+    metrics = np.full(
+        n_states,
+        np.inf,
+        dtype=np.float64
+    )
+
+    # A normal convolutional encoder starts in state 0.
+    metrics[0] = 0.0
+
+    previous_states = np.zeros(
+        (
+            steps,
+            n_states
+        ),
+        dtype=np.int16
+    )
+
+    previous_bits = np.zeros(
+        (
+            steps,
+            n_states
+        ),
+        dtype=np.uint8
+    )
+
+    for step in range(steps):
+
+        r = received[
+            step * n_outputs:
+            (step + 1) * n_outputs
+        ]
+
+        new_metrics = np.full(
+            n_states,
+            np.inf,
+            dtype=np.float64
+        )
+
+        for state in range(
+            n_states
+        ):
+
+            current_metric = metrics[
+                state
+            ]
+
+            if not np.isfinite(
+                current_metric
+            ):
+
+                continue
+
+            for bit in (
+                0,
+                1
+            ):
+
+                next_state, expected = _conv_next(
+                    state,
+                    bit,
+                    constraint_length,
+                    generators
+                )
+
+                branch_metric = sum(
+                    int(
+                        a != b
+                    )
+                    for a, b
+                    in zip(
+                        r,
+                        expected
+                    )
+                )
+
+                candidate_metric = (
+                    current_metric
+                    +
+                    branch_metric
+                )
+
+                if (
+                    candidate_metric
+                    <
+                    new_metrics[
+                        next_state
+                    ]
+                ):
+
+                    new_metrics[
+                        next_state
+                    ] = candidate_metric
+
+                    previous_states[
+                        step,
+                        next_state
+                    ] = state
+
+                    previous_bits[
+                        step,
+                        next_state
+                    ] = bit
+
+        metrics = new_metrics
+
+    final_state = int(
+        np.argmin(
+            metrics
+        )
+    )
+
+    path_metric = float(
+        metrics[
+            final_state
+        ]
+    )
+
+    decoded = np.zeros(
+        steps,
+        dtype=np.uint8
+    )
+
+    state = final_state
+
+    for step in range(
+        steps - 1,
+        -1,
+        -1
+    ):
+
+        decoded[
+            step
+        ] = previous_bits[
+            step,
+            state
+        ]
+
+        state = int(
+            previous_states[
+                step,
+                state
+            ]
+        )
+
+    return (
+        decoded,
+        path_metric
+    )
+
+
+# ============================================================
+# CONVOLUTIONAL CANDIDATE ANALYSIS
+# ============================================================
+
+def _convolutional_evidence(bits):
+
+    result = {
+        "available": False,
+        "best": None,
+        "candidates": [],
+        "evidence": 0.0,
+    }
+
+    if len(bits) < 64:
+
+        return result
+
+    best = None
+
+    for candidate in (
+        CONVOLUTIONAL_CANDIDATES
+    ):
+
+        K = candidate[
+            "constraint_length"
+        ]
+
+        generators = candidate[
+            "generators"
+        ]
+
+        for swap in (
+            False,
+            True
+        ):
+
+            received = bits
+
+            if len(received) % 2:
+                received = received[
+                    :-1
+                ]
+
+            if swap:
+
+                received = received.reshape(
+                    -1,
+                    2
+                )[
+                    :,
+                    ::-1
+                ].reshape(
+                    -1
+                )
+
+            decoded, path_metric = _viterbi_decode(
+                received,
+                K,
+                generators
+            )
+
+            if decoded is None:
+                continue
+
+            reencoded = _conv_encode(
+                decoded,
+                K,
+                generators
+            )
+
+            usable = min(
+                len(received),
+                len(reencoded)
+            )
+
+            if usable == 0:
+                continue
+
+            mismatch = float(
+                np.mean(
+                    received[
+                        :usable
+                    ]
+                    !=
+                    reencoded[
+                        :usable
+                    ]
+                )
+            )
+
+            consistency = (
+                1.0
+                -
+                mismatch
+            )
+
+            # For a rate-1/2 code a random stream should
+            # not normally achieve very high consistency.
+            evidence = float(
+                np.clip(
+                    (
+                        consistency
+                        -
+                        0.55
+                    )
+                    /
+                    0.45,
+                    0.0,
+                    1.0
+                )
+            )
+
+            entry = {
+                "constraint_length": int(K),
+                "generators": [
+                    int(g)
+                    for g in generators
+                ],
+                "generator_order_swapped": bool(
+                    swap
+                ),
+                "consistency": round(
+                    consistency,
+                    4
+                ),
+                "mismatch_rate": round(
+                    mismatch,
+                    4
+                ),
+                "path_metric": round(
+                    path_metric,
+                    4
+                ),
+                "evidence": round(
+                    evidence,
+                    4
+                ),
+                "decoded_bits": "".join(
+                    decoded.astype(
+                        str
+                    )
+                ),
+            }
+
+            result[
+                "candidates"
+            ].append(
+                entry
+            )
+
+            if (
+                best is None
+                or
+                evidence > best[
+                    "evidence"
+                ]
+            ):
+
+                best = entry
+
+    if best is None:
+
+        return result
+
+    result[
+        "available"
+    ] = True
+
+    result[
+        "best"
+    ] = best
+
+    result[
+        "evidence"
+    ] = float(
+        best[
+            "evidence"
+        ]
+    )
+
+    return result
+
+
+# ============================================================
+# VITERBI DECODING
+# ============================================================
+
+def _try_viterbi_decode(
+    bits,
+    conv_info
+):
+
+    result = {
+        "status": "NOT_ATTEMPTED",
+        "corrected_bits": None,
+        "corrections": 0,
+        "details": {},
+    }
+
+    if not conv_info.get(
+        "available",
+        False
+    ):
+
+        return result
+
+    best = conv_info.get(
+        "best"
+    )
+
+    if not best:
+
+        return result
+
+    decoded = best.get(
+        "decoded_bits"
+    )
+
+    if not decoded:
+
+        result[
+            "status"
+        ] = "FAILED"
+
+        return result
+
+    consistency = float(
+        best.get(
+            "consistency",
+            0.0
+        )
+    )
+
+    # Do not claim a validated FEC decode merely because
+    # Viterbi can always find a path. Require strong
+    # re-encode consistency.
+    if consistency < 0.80:
+
+        result[
+            "status"
+        ] = "CANDIDATE_ONLY"
+
+        result[
+            "details"
+        ] = {
+            "reason":
+                "Candidate did not reach validation threshold.",
+            "consistency":
+                consistency,
+        }
+
+        return result
+
+    result[
+        "status"
+    ] = "VALIDATED"
+
+    result[
+        "corrected_bits"
+    ] = decoded
+
+    result[
+        "corrections"
+    ] = int(
+        round(
+            float(
+                best.get(
+                    "mismatch_rate",
+                    0.0
+                )
+            )
+            *
+            len(bits)
+        )
+    )
+
+    result[
+        "details"
+    ] = {
+        "family":
+            "Convolutional + Viterbi",
+        "constraint_length":
+            best[
+                "constraint_length"
+            ],
+        "generators":
+            best[
+                "generators"
+            ],
+        "rate":
+            "1/2",
+        "reencoded_consistency":
+            consistency,
+        "decoder":
+            "Viterbi",
+    }
+
+    return result
+
+
+# ============================================================
+# LDPC SUPPORT
+# ============================================================
+
+def _ldpc_evidence(
+    bits,
+    parity_check_matrix=None
+):
+
+    result = {
+        "available": False,
+        "matrix_supplied": False,
+        "matrix_shape": None,
+        "syndrome_zero_rate": 0.0,
+        "evidence": 0.0,
+        "message": (
+            "LDPC analysis requires a supported "
+            "parity-check matrix/profile."
+        ),
+    }
+
+    if parity_check_matrix is None:
+
+        return result
+
+    H = np.asarray(
+        parity_check_matrix,
+        dtype=np.uint8
+    )
+
+    if H.ndim != 2:
+
+        return result
+
+    if H.shape[1] != len(bits):
+
+        return {
+            **result,
+            "matrix_supplied": True,
+            "matrix_shape": tuple(
+                H.shape
+            ),
+            "message": (
+                "Parity-check matrix length "
+                "does not match bitstream length."
+            ),
+        }
+
+    syndrome = (
+        (
+            H
+            @
+            bits
+        )
+        %
+        2
+    )
+
+    zero_rate = float(
+        np.mean(
+            syndrome == 0
+        )
+    )
+
+    if zero_rate >= 0.95:
+
+        evidence = 1.0
+
+    elif zero_rate >= 0.80:
+
+        evidence = 0.75
+
+    elif zero_rate >= 0.60:
+
+        evidence = 0.40
+
+    else:
+
+        evidence = 0.0
+
+    return {
+        "available": True,
+        "matrix_supplied": True,
+        "matrix_shape": tuple(
+            H.shape
+        ),
+        "syndrome_zero_rate": round(
+            zero_rate,
+            4
+        ),
+        "evidence": round(
+            evidence,
+            4
+        ),
+        "message": (
+            "LDPC parity-check evidence calculated."
+        ),
+    }
+
+
+def _ldpc_bitflip_decode(
+    bits,
+    parity_check_matrix,
+    max_iterations=20
+):
+
+    bits = np.asarray(
+        bits,
+        dtype=np.uint8
+    ).copy()
+
+    H = np.asarray(
+        parity_check_matrix,
+        dtype=np.uint8
+    )
+
+    if (
+        H.ndim != 2
+        or
+        H.shape[1] != len(bits)
+    ):
+
+        return {
+            "status": "INVALID_MATRIX",
+            "corrected_bits": None,
+            "corrections": 0,
+        }
+
+    corrected_count = 0
+
+    for _ in range(
+        max_iterations
+    ):
+
+        syndrome = (
+            (
+                H
+                @
+                bits
+            )
+            %
+            2
+        )
+
+        if np.all(
+            syndrome == 0
+        ):
+
+            return {
+                "status": "VALIDATED",
+                "corrected_bits": "".join(
+                    bits.astype(
+                        str
+                    )
+                ),
+                "corrections":
+                    corrected_count,
+            }
+
+        unsatisfied_checks = (
+            syndrome == 1
+        )
+
+        variable_votes = (
+            H[
+                unsatisfied_checks
+            ].sum(
+                axis=0
+            )
+        )
+
+        if len(
+            variable_votes
+        ) == 0:
+
+            break
+
+        maximum = int(
+            np.max(
+                variable_votes
+            )
+        )
+
+        if maximum <= 0:
+            break
+
+        threshold = max(
+            1,
+            int(
+                np.ceil(
+                    maximum * 0.50
+                )
+            )
+        )
+
+        flip = (
+            variable_votes
+            >=
+            threshold
+        )
+
+        if not np.any(
+            flip
+        ):
+            break
+
+        bits[
+            flip
+        ] ^= 1
+
+        corrected_count += int(
+            np.sum(
+                flip
+            )
+        )
+
+    return {
+        "status": "FAILED",
+        "corrected_bits": None,
+        "corrections":
+            corrected_count,
+    }
+
+
+# ============================================================
+# CONCATENATED DECODING
+# ============================================================
+
+def _try_concatenated_decode(
+    bits,
+    conv_info,
+    rs_info
+):
+
+    result = {
+        "status": "NOT_ATTEMPTED",
+        "corrected_bits": None,
+        "details": {},
+    }
+
+    if not (
+        conv_info.get(
+            "available",
+            False
+        )
+        and
+        rs_info.get(
+            "available",
+            False
+        )
+    ):
+
+        return result
+
+    conv = _try_viterbi_decode(
+        bits,
+        conv_info
+    )
+
+    if conv.get(
+        "status"
+    ) not in (
+        "VALIDATED",
+    ):
+
+        result[
+            "status"
+        ] = "CANDIDATE_ONLY"
+
+        return result
+
+    decoded_bits = _clean_bits(
+        conv.get(
+            "corrected_bits",
+            ""
+        )
+    )
+
+    rs = _try_reed_solomon_decode(
+        decoded_bits,
+        rs_info
+    )
+
+    if rs.get(
+        "status"
+    ) == "SUCCESS":
+
+        result[
+            "status"
+        ] = "VALIDATED"
+
+        result[
+            "corrected_bits"
+        ] = rs[
+            "corrected_bits"
+        ]
+
+        result[
+            "details"
+        ] = {
+            "structure":
+                "Convolutional → Viterbi → Reed-Solomon",
+            "inner_decoder":
+                "Viterbi",
+            "outer_decoder":
+                "Reed-Solomon",
+        }
+
+    else:
+
+        result[
+            "status"
+        ] = "CANDIDATE_ONLY"
+
+        result[
+            "details"
+        ] = {
+            "structure":
+                "Convolutional + Reed-Solomon",
+            "message":
+                "Candidate structure found, but "
+                "combined decode was not validated."
+        }
+
+    return result
+
+
+# ============================================================
+# LEGACY SUPPORTING CLASSIFICATION
+# ============================================================
+
+def _legacy_evidence_score(
     parity,
     repetition,
     hamming,
-    block,
+    block
 ):
-
-    score = 0.0
-    reasons = []
 
     parity_score = float(
         parity.get(
@@ -680,133 +2230,50 @@ def _classify_fec(
         )
     )
 
-    block_corr = float(
+    block_score = float(
         block.get(
             "best_correlation",
             0.0
         )
     )
 
-    # ========================================================
-    # STRONG STRUCTURAL EVIDENCE
-    # ========================================================
-    #
-    # These are highly specific patterns and therefore carry
-    # more weight than generic statistical correlation.
-    # ========================================================
+    score = 0.0
 
-    # --------------------------------------------------------
-    # REPETITION
-    # --------------------------------------------------------
-
-    if repetition_score >= 0.90:
-
-        score += 0.70
-
-        reasons.append(
-            "strong repeated-payload structure"
-        )
-
-    elif repetition_score >= 0.70:
-
-        score += 0.45
-
-        reasons.append(
-            "moderate repeated-bit structure"
-        )
-
-    elif repetition_score >= 0.50:
-
-        score += 0.25
-
-        reasons.append(
-            "weak repeated-bit structure"
-        )
-
-    # --------------------------------------------------------
-    # HAMMING
-    # --------------------------------------------------------
-
-    if hamming_score >= 0.80:
-
-        score += 0.70
-
-        reasons.append(
-            "strong Hamming(7,4) syndrome consistency"
-        )
-
-    elif hamming_score >= 0.50:
-
-        score += 0.45
-
-        reasons.append(
-            "moderate Hamming(7,4) syndrome consistency"
-        )
-
-    elif hamming_score >= 0.30:
-
-        score += 0.25
-
-        reasons.append(
-            "weak Hamming(7,4) syndrome consistency"
-        )
-
-    # --------------------------------------------------------
-    # PARITY
-    # --------------------------------------------------------
-
+    # These are supporting observations only.
     if parity_score >= 0.90:
-
-        score += 0.45
-
-        reasons.append(
-            "strong parity/check-bit consistency"
-        )
+        score += 0.25
 
     elif parity_score >= 0.75:
-
-        score += 0.30
-
-        reasons.append(
-            "moderate parity/check-bit consistency"
-        )
+        score += 0.15
 
     elif parity_score >= 0.60:
+        score += 0.08
 
+    if repetition_score >= 0.90:
+        score += 0.25
+
+    elif repetition_score >= 0.70:
         score += 0.15
 
-        reasons.append(
-            "weak parity/check-bit consistency"
-        )
+    elif repetition_score >= 0.50:
+        score += 0.08
 
-    # --------------------------------------------------------
-    # BLOCK CORRELATION
-    #
-    # Block correlation by itself is not enough to claim FEC.
-    # It is supporting evidence only.
-    # --------------------------------------------------------
+    if hamming_score >= 0.80:
+        score += 0.25
 
-    if block_corr >= 0.90:
-
+    elif hamming_score >= 0.50:
         score += 0.15
 
-        reasons.append(
-            "strong block correlation"
-        )
+    elif hamming_score >= 0.30:
+        score += 0.08
 
-    elif block_corr >= 0.70:
-
+    if block_score >= 0.90:
         score += 0.10
 
-        reasons.append(
-            "moderate block correlation"
-        )
+    elif block_score >= 0.70:
+        score += 0.06
 
-    # ========================================================
-    # CAP SCORE
-    # ========================================================
-
-    score = float(
+    return float(
         np.clip(
             score,
             0.0,
@@ -814,34 +2281,429 @@ def _classify_fec(
         )
     )
 
-    # ========================================================
-    # CLASSIFICATION
-    # ========================================================
 
-    if score >= 0.70:
+# ============================================================
+# EVIDENCE REASONS
+# ============================================================
 
+def _make_reasons(
+    parity,
+    repetition,
+    hamming,
+    block,
+    conv,
+    rs,
+    ldpc,
+    concatenated
+):
+
+    reasons = []
+
+    # --------------------------------------------------------
+    # Convolutional
+    # --------------------------------------------------------
+
+    if conv.get(
+        "best"
+    ):
+
+        best = conv[
+            "best"
+        ]
+
+        consistency = float(
+            best.get(
+                "consistency",
+                0.0
+            )
+        )
+
+        if consistency >= 0.80:
+
+            reasons.append(
+                "Strong convolutional-code path consistency"
+            )
+
+        elif consistency >= 0.65:
+
+            reasons.append(
+                "Moderate convolutional-code path consistency"
+            )
+
+    # --------------------------------------------------------
+    # Reed-Solomon
+    # --------------------------------------------------------
+
+    rs_rate = float(
+        rs.get(
+            "syndrome_zero_rate",
+            0.0
+        )
+    )
+
+    if rs_rate >= 0.75:
+
+        reasons.append(
+            "Strong Reed-Solomon syndrome consistency"
+        )
+
+    elif rs_rate >= 0.25:
+
+        reasons.append(
+            "Some Reed-Solomon codeword structure detected"
+        )
+
+    # --------------------------------------------------------
+    # LDPC
+    # --------------------------------------------------------
+
+    ldpc_rate = float(
+        ldpc.get(
+            "syndrome_zero_rate",
+            0.0
+        )
+    )
+
+    if ldpc_rate >= 0.95:
+
+        reasons.append(
+            "Strong LDPC parity-check consistency"
+        )
+
+    elif ldpc_rate >= 0.80:
+
+        reasons.append(
+            "Moderate LDPC parity-check consistency"
+        )
+
+    # --------------------------------------------------------
+    # Concatenated
+    # --------------------------------------------------------
+
+    if concatenated.get(
+        "status"
+    ) == "VALIDATED":
+
+        reasons.append(
+            "Convolutional and Reed-Solomon "
+            "decoding validated together"
+        )
+
+    # --------------------------------------------------------
+    # Existing statistical evidence
+    # --------------------------------------------------------
+
+    if float(
+        parity.get(
+            "parity_consistency",
+            0.0
+        )
+    ) >= 0.75:
+
+        reasons.append(
+            "Parity/check-bit consistency observed"
+        )
+
+    if float(
+        repetition.get(
+            "repetition_score",
+            0.0
+        )
+    ) >= 0.70:
+
+        reasons.append(
+            "Repeated-bit or repeated-block structure observed"
+        )
+
+    if float(
+        hamming.get(
+            "syndrome_evidence",
+            0.0
+        )
+    ) >= 0.50:
+
+        reasons.append(
+            "Hamming-like parity structure observed"
+        )
+
+    if float(
+        block.get(
+            "best_correlation",
+            0.0
+        )
+    ) >= 0.70:
+
+        reasons.append(
+            "Strong block correlation observed"
+        )
+
+    return reasons
+
+
+# ============================================================
+# FAMILY CANDIDATES
+# ============================================================
+
+def _family_candidates(
+    conv,
+    rs,
+    concatenated,
+    ldpc
+):
+
+    conv_score = float(
+        conv.get(
+            "evidence",
+            0.0
+        )
+    )
+
+    rs_score = float(
+        rs.get(
+            "evidence",
+            0.0
+        )
+    )
+
+    ldpc_score = float(
+        ldpc.get(
+            "evidence",
+            0.0
+        )
+    )
+
+    if concatenated.get(
+        "status"
+    ) == "VALIDATED":
+
+        concat_score = 1.0
+
+    elif concatenated.get(
+        "status"
+    ) == "CANDIDATE_ONLY":
+
+        concat_score = min(
+            0.75,
+            max(
+                conv_score,
+                rs_score
+            )
+        )
+
+    else:
+
+        concat_score = (
+            conv_score
+            *
+            rs_score
+        )
+
+    candidates = [
+        {
+            "family":
+                "Convolutional + Viterbi",
+            "evidence":
+                round(
+                    conv_score,
+                    4
+                ),
+            "validated":
+                conv_score >= 0.80,
+        },
+        {
+            "family":
+                "Reed-Solomon",
+            "evidence":
+                round(
+                    rs_score,
+                    4
+                ),
+            "validated":
+                rs_score >= 0.75
+                and
+                rs.get(
+                    "valid_codewords",
+                    0
+                ) > 0,
+        },
+        {
+            "family":
+                "Concatenated",
+            "evidence":
+                round(
+                    float(
+                        concat_score
+                    ),
+                    4
+                ),
+            "validated":
+                concatenated.get(
+                    "status"
+                ) == "VALIDATED",
+        },
+        {
+            "family":
+                "LDPC",
+            "evidence":
+                round(
+                    ldpc_score,
+                    4
+                ),
+            "validated":
+                ldpc_score >= 0.80,
+        },
+    ]
+
+    candidates.sort(
+        key=lambda item:
+            item["evidence"],
+        reverse=True
+    )
+
+    return candidates
+
+
+# ============================================================
+# FINAL CLASSIFICATION
+# ============================================================
+
+def _classify_fec(
+    legacy_score,
+    conv,
+    rs,
+    concatenated,
+    ldpc,
+    reasons
+):
+
+    conv_strong = (
+        float(
+            conv.get(
+                "evidence",
+                0.0
+            )
+        )
+        >=
+        0.80
+    )
+
+    rs_strong = (
+        float(
+            rs.get(
+                "evidence",
+                0.0
+            )
+        )
+        >=
+        0.75
+    )
+
+    ldpc_strong = (
+        float(
+            ldpc.get(
+                "evidence",
+                0.0
+            )
+        )
+        >=
+        0.80
+    )
+
+    concatenated_valid = (
+        concatenated.get(
+            "status"
+        )
+        ==
+        "VALIDATED"
+    )
+
+    decoder_validated = (
+        conv_strong
+        or
+        (
+            rs_strong
+            and
+            rs.get(
+                "valid_codewords",
+                0
+            ) > 0
+        )
+        or
+        ldpc_strong
+        or
+        concatenated_valid
+    )
+
+    strong_sources = sum(
+        [
+            conv_strong,
+            rs_strong,
+            ldpc_strong,
+            concatenated_valid,
+        ]
+    )
+
+    if concatenated_valid:
+
+        evidence = 1.0
         classification = "LIKELY"
 
-    elif score >= 0.30:
+    elif strong_sources >= 2:
+
+        evidence = 0.90
+        classification = "LIKELY"
+
+    elif decoder_validated:
+
+        evidence = 0.85
+        classification = "LIKELY"
+
+    elif (
+        legacy_score >= 0.30
+        or
+        float(
+            conv.get(
+                "evidence",
+                0.0
+            )
+        ) >= 0.50
+        or
+        float(
+            rs.get(
+                "evidence",
+                0.0
+            )
+        ) >= 0.50
+        or
+        float(
+            ldpc.get(
+                "evidence",
+                0.0
+            )
+        ) >= 0.50
+    ):
+
+        evidence = max(
+            0.30,
+            legacy_score
+        )
 
         classification = "POSSIBLE"
 
     else:
 
+        evidence = 0.0
         classification = "NONE"
-
-    # ========================================================
-    # CONFIDENCE
-    # ========================================================
-
-    confidence = float(
-        score
-    )
 
     return (
         classification,
-        confidence,
-        reasons
+        float(
+            np.clip(
+                evidence,
+                0.0,
+                1.0
+            )
+        ),
     )
 
 
@@ -849,25 +2711,34 @@ def _classify_fec(
 # PUBLIC API
 # ============================================================
 
-def analyze_fec(bits):
+def analyze_fec(
+    bits,
+    ldpc_matrix=None
+):
     """
-    Analyze a recovered bitstream for possible FEC.
+    Analyze a recovered bitstream for FEC.
 
-    Parameters
-    ----------
-    bits:
-        String such as "010101..."
-        or an array/list containing 0 and 1.
+    The function preserves the original SPECTRA API:
 
-    Returns
-    -------
-    dict
-        FEC-analysis results.
+        analyze_fec(bits)
+
+    Optional:
+
+        analyze_fec(
+            bits,
+            ldpc_matrix=H
+        )
+
+    where H is a supported LDPC parity-check matrix.
     """
 
     bits = _clean_bits(
         bits
     )
+
+    # ========================================================
+    # BASIC EVIDENCE
+    # ========================================================
 
     balance = _bit_balance(
         bits
@@ -893,90 +2764,587 @@ def analyze_fec(bits):
         bits
     )
 
-    (
-        classification,
-        score,
-        reasons
-    ) = _classify_fec(
+    # ========================================================
+    # PS-REQUIRED FEC CANDIDATES
+    # ========================================================
+
+    convolutional = _convolutional_evidence(
+        bits
+    )
+
+    reed_solomon = _reed_solomon_evidence(
+        bits
+    )
+
+    ldpc = _ldpc_evidence(
         bits,
+        ldpc_matrix
+    )
+
+    # ========================================================
+    # DECODING ATTEMPTS
+    # ========================================================
+
+    viterbi_result = _try_viterbi_decode(
+        bits,
+        convolutional
+    )
+
+    rs_decode_result = _try_reed_solomon_decode(
+        bits,
+        reed_solomon
+    )
+
+    concatenated_result = _try_concatenated_decode(
+        bits,
+        convolutional,
+        reed_solomon
+    )
+
+    ldpc_result = {
+        "status":
+            "NOT_ATTEMPTED",
+        "corrected_bits":
+            None,
+        "corrections":
+            0,
+    }
+
+    if ldpc_matrix is not None:
+
+        ldpc_result = _ldpc_bitflip_decode(
+            bits,
+            ldpc_matrix
+        )
+
+    # ========================================================
+    # SUPPORTING EVIDENCE SCORE
+    # ========================================================
+
+    legacy_score = _legacy_evidence_score(
+        parity,
+        repetition,
+        hamming,
+        block
+    )
+
+    # ========================================================
+    # EXPLANATION
+    # ========================================================
+
+    reasons = _make_reasons(
         parity,
         repetition,
         hamming,
         block,
+        convolutional,
+        reed_solomon,
+        ldpc,
+        concatenated_result
     )
+
+    # ========================================================
+    # FINAL EVIDENCE
+    # ========================================================
+
+    (
+        classification,
+        score
+    ) = _classify_fec(
+        legacy_score,
+        convolutional,
+        reed_solomon,
+        concatenated_result,
+        ldpc,
+        reasons
+    )
+
+    # ========================================================
+    # FAMILY CANDIDATES
+    # ========================================================
+
+    candidates = _family_candidates(
+        convolutional,
+        reed_solomon,
+        concatenated_result,
+        ldpc
+    )
+
+    # ========================================================
+    # IDENTIFIED FAMILY
+    # ========================================================
+
+    identified_family = "UNKNOWN"
+
+    if (
+        concatenated_result.get(
+            "status"
+        )
+        ==
+        "VALIDATED"
+    ):
+
+        identified_family = (
+            "Concatenated"
+        )
+
+    elif (
+        viterbi_result.get(
+            "status"
+        )
+        ==
+        "VALIDATED"
+    ):
+
+        identified_family = (
+            "Convolutional + Viterbi"
+        )
+
+    elif (
+        rs_decode_result.get(
+            "status"
+        )
+        ==
+        "SUCCESS"
+    ):
+
+        identified_family = (
+            "Reed-Solomon"
+        )
+
+    elif (
+        ldpc_result.get(
+            "status"
+        )
+        ==
+        "VALIDATED"
+    ):
+
+        identified_family = (
+            "LDPC"
+        )
+
+    # If no validated decoder exists, do not force a family.
+    if classification == "NONE":
+
+        identified_family = "UNKNOWN"
+
+    # ========================================================
+    # SELECT CORRECTED BITSTREAM
+    # ========================================================
+
+    corrected_bits = None
+    decoder_family = "NONE"
+    decoder_status = "NOT_AVAILABLE"
+    decoder_details = {}
+
+    if (
+        concatenated_result.get(
+            "status"
+        )
+        ==
+        "VALIDATED"
+    ):
+
+        corrected_bits = concatenated_result[
+            "corrected_bits"
+        ]
+
+        decoder_family = "Concatenated"
+        decoder_status = "VALIDATED"
+        decoder_details = concatenated_result.get(
+            "details",
+            {}
+        )
+
+    elif (
+        viterbi_result.get(
+            "status"
+        )
+        ==
+        "VALIDATED"
+    ):
+
+        corrected_bits = viterbi_result[
+            "corrected_bits"
+        ]
+
+        decoder_family = (
+            "Convolutional + Viterbi"
+        )
+
+        decoder_status = "VALIDATED"
+        decoder_details = viterbi_result.get(
+            "details",
+            {}
+        )
+
+    elif (
+        rs_decode_result.get(
+            "status"
+        )
+        ==
+        "SUCCESS"
+    ):
+
+        corrected_bits = rs_decode_result[
+            "corrected_bits"
+        ]
+
+        decoder_family = "Reed-Solomon"
+        decoder_status = "SUCCESS"
+        decoder_details = rs_decode_result.get(
+            "details",
+            {}
+        )
+
+    elif (
+        ldpc_result.get(
+            "status"
+        )
+        ==
+        "VALIDATED"
+    ):
+
+        corrected_bits = ldpc_result[
+            "corrected_bits"
+        ]
+
+        decoder_family = "LDPC"
+        decoder_status = "VALIDATED"
+        decoder_details = {
+            "decoder":
+                "LDPC bit-flipping",
+            "corrections":
+                ldpc_result.get(
+                    "corrections",
+                    0
+                ),
+        }
+
+    # ========================================================
+    # CORRECTION COUNT
+    # ========================================================
+
+    corrections = 0
+
+    if (
+        concatenated_result.get(
+            "status"
+        )
+        ==
+        "VALIDATED"
+    ):
+
+        corrections = 0
+
+    elif (
+        viterbi_result.get(
+            "status"
+        )
+        ==
+        "VALIDATED"
+    ):
+
+        corrections = int(
+            viterbi_result.get(
+                "corrections",
+                0
+            )
+        )
+
+    elif (
+        rs_decode_result.get(
+            "status"
+        )
+        ==
+        "SUCCESS"
+    ):
+
+        corrections = int(
+            rs_decode_result.get(
+                "corrections",
+                0
+            )
+        )
+
+    elif (
+        ldpc_result.get(
+            "status"
+        )
+        ==
+        "VALIDATED"
+    ):
+
+        corrections = int(
+            ldpc_result.get(
+                "corrections",
+                0
+            )
+        )
+
+    # Ensure a successfully decoded Reed-Solomon result is not overridden by the heuristic Viterbi candidate.
+    if (
+        rs_decode_result.get("status") == "SUCCESS"
+        and
+        concatenated_result.get("status") != "VALIDATED"
+    ):
+        identified_family = "Reed-Solomon"
+        corrected_bits = rs_decode_result.get("corrected_bits")
+        decoder_family = "Reed-Solomon"
+        decoder_status = "SUCCESS"
+        decoder_details = rs_decode_result.get("details", {})
+        corrections = int(rs_decode_result.get("corrections", 0))
+
+    # ========================================================
+    # PUBLIC RESULT
+    # ========================================================
 
     return {
 
-        "bits_analyzed": int(
-            len(bits)
-        ),
+        # ----------------------------------------------------
+        # Existing SPECTRA fields
+        # ----------------------------------------------------
 
-        "zero_percentage": balance[
-            "zero_percentage"
-        ],
+        "available":
+            bool(
+                len(bits) > 0
+            ),
 
-        "one_percentage": balance[
-            "one_percentage"
-        ],
+        "bits_analyzed":
+            int(
+                len(bits)
+            ),
 
-        "parity_group_size": parity[
-            "best_group_size"
-        ],
+        "zero_percentage":
+            balance[
+                "zero_percentage"
+            ],
 
-        "parity_evidence": parity[
-            "parity_consistency"
-        ],
+        "one_percentage":
+            balance[
+                "one_percentage"
+            ],
 
-        "best_repeat": repetition[
-            "best_repeat"
-        ],
+        "parity_group_size":
+            parity[
+                "best_group_size"
+            ],
 
-        "repetition_evidence": repetition[
-            "repetition_score"
-        ],
+        "parity_evidence":
+            parity[
+                "parity_consistency"
+            ],
 
-        "copy_agreement": repetition[
-            "copy_agreement"
-        ],
+        "best_repeat":
+            repetition[
+                "best_repeat"
+            ],
 
-        "hamming_code": hamming[
-            "code"
-        ],
+        "repetition_evidence":
+            repetition[
+                "repetition_score"
+            ],
 
-        "hamming_codeword_size": hamming[
-            "codeword_size"
-        ],
+        "copy_agreement":
+            repetition[
+                "copy_agreement"
+            ],
 
-        "hamming_valid_codeword_rate": hamming[
-            "valid_codeword_rate"
-        ],
+        "hamming_code":
+            hamming[
+                "code"
+            ],
 
-        "hamming_syndrome_evidence": hamming[
-            "syndrome_evidence"
-        ],
+        "hamming_codeword_size":
+            hamming[
+                "codeword_size"
+            ],
 
-        "hamming_codeword_count": hamming[
-            "codeword_count"
-        ],
+        "hamming_valid_codeword_rate":
+            hamming[
+                "valid_codeword_rate"
+            ],
 
-        "best_block_size": block[
-            "best_block_size"
-        ],
+        "hamming_syndrome_evidence":
+            hamming[
+                "syndrome_evidence"
+            ],
 
-        "block_correlation": block[
-            "best_correlation"
-        ],
+        "hamming_codeword_count":
+            hamming[
+                "codeword_count"
+            ],
 
-        "code_rate_candidates": length[
-            "rate_candidates"
-        ],
+        "best_block_size":
+            block[
+                "best_block_size"
+            ],
 
-        "fec_evidence": classification,
+        "block_correlation":
+            block[
+                "best_correlation"
+            ],
 
-        "confidence": round(
-            score * 100.0,
-            2
-        ),
+        "code_rate_candidates":
+            length[
+                "rate_candidates"
+            ],
 
-        "evidence_reasons": reasons,
+        "fec_evidence":
+            classification,
+
+        "confidence":
+            round(
+                score * 100.0,
+                2
+            ),
+
+        "evidence_reasons":
+            reasons,
+
+        # ----------------------------------------------------
+        # New PS FEC fields
+        # ----------------------------------------------------
+
+        "supported_fec_families":
+            SUPPORTED_FEC_FAMILIES,
+
+        "identified_fec_family":
+            identified_family,
+
+        "fec_family_candidates":
+            candidates,
+
+        "convolutional_viterbi":
+            {
+                "available":
+                    convolutional[
+                        "available"
+                    ],
+                "best":
+                    convolutional[
+                        "best"
+                    ],
+                "candidates":
+                    convolutional[
+                        "candidates"
+                    ],
+                "evidence":
+                    convolutional[
+                        "evidence"
+                    ],
+                "decoder_status":
+                    viterbi_result[
+                        "status"
+                    ],
+            },
+
+        "reed_solomon":
+            {
+                "available":
+                    reed_solomon[
+                        "available"
+                    ],
+                "best_nsym":
+                    reed_solomon[
+                        "best_nsym"
+                    ],
+                "offset":
+                    reed_solomon[
+                        "best_offset"
+                    ],
+                "codeword_size":
+                    reed_solomon[
+                        "codeword_size"
+                    ],
+                "syndrome_zero_rate":
+                    reed_solomon[
+                        "syndrome_zero_rate"
+                    ],
+                "codewords_tested":
+                    reed_solomon[
+                        "codewords_tested"
+                    ],
+                "valid_codewords":
+                    reed_solomon[
+                        "valid_codewords"
+                    ],
+                "evidence":
+                    reed_solomon[
+                        "evidence"
+                    ],
+                "decoder_library_available":
+                    reed_solomon[
+                        "decoder_available"
+                    ],
+                "decoder_status":
+                    rs_decode_result[
+                        "status"
+                    ],
+            },
+
+        "concatenated":
+            {
+                "status":
+                    concatenated_result[
+                        "status"
+                    ],
+                "details":
+                    concatenated_result.get(
+                        "details",
+                        {}
+                    ),
+            },
+
+        "ldpc":
+            {
+                "available":
+                    ldpc[
+                        "available"
+                    ],
+                "matrix_supplied":
+                    ldpc[
+                        "matrix_supplied"
+                    ],
+                "matrix_shape":
+                    ldpc[
+                        "matrix_shape"
+                    ],
+                "syndrome_zero_rate":
+                    ldpc[
+                        "syndrome_zero_rate"
+                    ],
+                "evidence":
+                    ldpc[
+                        "evidence"
+                    ],
+                "decoder_status":
+                    ldpc_result[
+                        "status"
+                    ],
+                "message":
+                    ldpc[
+                        "message"
+                    ],
+            },
+
+        # ----------------------------------------------------
+        # Corrected / decoded output
+        # ----------------------------------------------------
+
+        "decoder_family":
+            decoder_family,
+
+        "decoder_status":
+            decoder_status,
+
+        "decoder_details":
+            decoder_details,
+
+        "corrected_bitstream":
+            corrected_bits,
+
+        "corrections":
+            corrections,
     }
