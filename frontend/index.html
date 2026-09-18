@@ -1705,6 +1705,45 @@ td:last-child{
         </div>
 
 
+        <div class="digital-metric">
+
+          <label>
+            Identified FEC family
+          </label>
+
+          <b id="fecFamily">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Decoder
+          </label>
+
+          <b id="fecDecoder">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Corrections
+          </label>
+
+          <b id="fecCorrections">
+            —
+          </b>
+
+        </div>
+
+
       </div>
 
 
@@ -1721,6 +1760,40 @@ td:last-child{
           <span class="empty">
             —
           </span>
+        </div>
+
+      </div>
+
+
+      <div class="evidence">
+
+        <label>
+          FEC family candidates
+        </label>
+
+        <div
+          id="fecFamilies"
+          class="code-rates"
+        >
+          <span class="empty">
+            —
+          </span>
+        </div>
+
+      </div>
+
+
+      <div class="evidence">
+
+        <label>
+          Decoder details
+        </label>
+
+        <div
+          id="fecDecoderDetails"
+          class="reason-list"
+        >
+          No decoder information available.
         </div>
 
       </div>
@@ -2223,6 +2296,18 @@ function resetDigital(){
   set('copyAgreement','—');
   set('hammingEvidence','—');
 
+  set('fecFamily','—');
+  set('fecDecoder','—');
+  set('fecCorrections','—');
+
+  $('fecFamilies').innerHTML =
+    '<span class="empty">—</span>';
+
+  set(
+    'fecDecoderDetails',
+    'No decoder information available.'
+  );
+
   set(
     'codeRates',
     '<span class="empty">—</span>'
@@ -2504,8 +2589,123 @@ function renderDigital(d){
 
 
     /* --------------------------------------------------------
-       CODE RATES
+       FEC FAMILY / DECODER
     -------------------------------------------------------- */
+
+    set(
+      'fecFamily',
+      fec.identified_fec_family || 'UNKNOWN'
+    );
+
+
+    set(
+      'fecDecoder',
+      `${fec.decoder_family || 'NONE'} / ${fec.decoder_status || 'NOT_AVAILABLE'}`
+    );
+
+
+    set(
+      'fecCorrections',
+      Number.isFinite(
+        Number(fec.corrections)
+      )
+        ? Number(
+            fec.corrections
+          ).toLocaleString()
+        : '—'
+    );
+
+
+    const familyCandidates =
+      Array.isArray(
+        fec.fec_family_candidates
+      )
+        ? fec.fec_family_candidates
+        : [];
+
+
+    if(familyCandidates.length){
+
+      $('fecFamilies').innerHTML =
+        familyCandidates
+          .map(
+            x => {
+
+              const evidence =
+                Number(
+                  x.evidence
+                );
+
+              const validated =
+                x.validated
+                  ? 'VALIDATED'
+                  : 'CANDIDATE';
+
+              return `
+                <span class="rate-chip">
+                  ${x.family}: ${validated}
+                  (${Number.isFinite(evidence) ? evidence.toFixed(2) : '0.00'})
+                </span>
+              `;
+
+            }
+          )
+          .join('');
+
+    }else{
+
+      $('fecFamilies').innerHTML =
+        '<span class="empty">None identified</span>';
+
+    }
+
+
+    const decoderDetails =
+      fec.decoder_details &&
+      typeof fec.decoder_details === 'object'
+        ? fec.decoder_details
+        : {};
+
+
+    const decoderParts =
+      Object.entries(
+        decoderDetails
+      )
+        .map(
+          ([key, value]) => {
+
+            if(
+              value === null ||
+              value === undefined
+            ){
+
+              return null;
+
+            }
+
+            const shown =
+              Array.isArray(value)
+                ? value.join(', ')
+                : String(value);
+
+            return `${key}: ${shown}`;
+
+          }
+        )
+        .filter(Boolean);
+
+
+    set(
+      'fecDecoderDetails',
+      decoderParts.length
+        ? decoderParts.join(' • ')
+        : 'No decoder information available.'
+    );
+
+
+    /* --------------------------------------------------------
+       CODE RATES
+    --------------------------------------------------------
 
     const rates =
       Array.isArray(
