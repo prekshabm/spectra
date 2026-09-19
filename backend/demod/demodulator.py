@@ -1,5 +1,5 @@
 import numpy as np
-
+from backend.demod.synchronizer import synchronize_signal
 
 
 CLASSES = [
@@ -801,6 +801,9 @@ def demodulate(
         signal
     )
 
+    
+
+
     modulation = str(
         modulation
     ).strip().upper()
@@ -824,6 +827,18 @@ def demodulate(
             f"Unsupported modulation: "
             f"{modulation}"
         )
+
+    sync_result = synchronize_signal(
+        x,
+        fs,
+        modulation
+    )
+
+    x = sync_result["signal"]
+
+    frequency_offset = (
+        sync_result["frequency_offset_hz"]
+    )
 
     sps = _estimate_sps(
         symbol_rate,
@@ -921,6 +936,12 @@ def demodulate(
         "modulation": modulation,
 
         "sample_rate": float(fs),
+
+        "frequency_offset_hz": float(
+            frequency_offset
+        ),
+
+        "synchronization_applied": True,
 
         "symbol_rate": (
             float(symbol_rate)
