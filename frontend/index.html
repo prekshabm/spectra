@@ -1574,6 +1574,31 @@ td:last-child{
 
         </div>
 
+        <div class="digital-metric">
+
+          <label>
+            Frequency offset
+          </label>
+
+          <b id="frequencyOffset">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Synchronization
+          </label>
+
+          <b id="syncStatus">
+            —
+          </b>
+
+        </div>
+
 
         <div class="digital-metric">
 
@@ -2386,6 +2411,8 @@ function resetDigital(){
   set('demodMod','—');
   set('symbolRate','—');
   set('sps','—');
+  set('frequencyOffset','—');
+  set('syncStatus','—');
   set('symbolsRecovered','—');
   set('bitsRecovered','—');
   set('bitBalance','—');
@@ -2561,6 +2588,24 @@ function renderDigital(d){
         demod.samples_per_symbol,
         2
       )
+    );
+
+    set(
+      'frequencyOffset',
+      Number.isFinite(
+        Number(demod.frequency_offset_hz)
+      )
+        ? Number(
+            demod.frequency_offset_hz
+          ).toLocaleString() + ' Hz'
+        : '—'
+    );
+
+    set(
+      'syncStatus',
+      demod.synchronization_applied
+        ? 'Applied'
+        : 'Not applied'
     );
 
     set(
