@@ -1804,10 +1804,57 @@ def _try_viterbi_decode(
         )
     )
 
+    candidates = conv_info.get(
+        "candidates",
+        []
+    )
+
+    other_evidence = sorted(
+        [
+            float(
+                c.get(
+                    "evidence",
+                    0.0
+                )
+            )
+            for c in candidates
+            if c is not best
+        ],
+        reverse=True
+    )
+
+    second_best_evidence = (
+        other_evidence[0]
+        if other_evidence
+        else 0.0
+    )
+
+    evidence_margin = (
+        float(
+            best.get(
+                "evidence",
+                0.0
+            )
+        )
+        -
+        second_best_evidence
+    )
+
     # Do not claim a validated FEC decode merely because
     # Viterbi can always find a path. Require strong
     # re-encode consistency.
-    if consistency < 0.80:
+    if (
+        consistency < 0.95
+        or
+        float(
+            best.get(
+                "evidence",
+                0.0
+            )
+        ) < 0.88
+        or
+        evidence_margin < 0.05
+    ):
 
         result[
             "status"
