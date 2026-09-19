@@ -1145,6 +1145,20 @@ td:last-child{
 
         </select>
 
+        <div class="control-group">
+
+          <label for="referenceBits">
+            Reference Bitstream
+          </label>
+
+          <input
+            id="referenceBits"
+            type="text"
+            placeholder="Enter reference bits (e.g. 01010101...)"
+          />
+
+        </div>
+
       </div>
 
 
@@ -1873,6 +1887,95 @@ td:last-child{
 
 
     <!-- =====================================================
+        BER ANALYSIS
+    ====================================================== -->
+
+    <div class="card digital-card full">
+
+      <div class="digital-title">
+
+        <h3>
+          BER Analysis
+        </h3>
+
+        <span id="berStatus">
+          Waiting for analysis
+        </span>
+
+      </div>
+
+
+      <div class="digital-metrics">
+
+        <div class="digital-metric">
+
+          <label>
+            BER
+          </label>
+
+          <b id="berValue">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Bit Errors
+          </label>
+
+          <b id="berErrors">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Bits Compared
+          </label>
+
+          <b id="berCompared">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Reference Bits
+          </label>
+
+          <b id="berReference">
+            —
+          </b>
+
+        </div>
+
+
+        <div class="digital-metric">
+
+          <label>
+            Recovered Bits
+          </label>
+
+          <b id="berRecovered">
+            —
+          </b>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- =====================================================
          INTERLEAVING
     ====================================================== -->
 
@@ -2328,6 +2431,13 @@ function resetDigital(){
 
   $('copyBits').disabled = true;
 
+  set('berStatus','Waiting for analysis');
+  set('berValue','—');
+  set('berErrors','—');
+  set('berCompared','—');
+  set('berReference','—');
+  set('berRecovered','—');
+
   set(
     'interleavingStatus',
     'Waiting for analysis'
@@ -2518,6 +2628,66 @@ function renderDigital(d){
     );
 
   }
+
+    /* ----------------------------------------------------------
+      BER
+    ---------------------------------------------------------- */
+
+    const ber =
+      d.ber || {};
+
+    if(ber.available){
+
+      set(
+        'berStatus',
+        'BER calculated'
+      );
+
+      set(
+        'berValue',
+        Number.isFinite(
+          Number(ber.ber)
+        )
+          ? Number(ber.ber).toFixed(6)
+          : '—'
+      );
+
+      set(
+        'berErrors',
+        Number(
+          ber.bit_errors || 0
+        ).toLocaleString()
+      );
+
+      set(
+        'berCompared',
+        Number(
+          ber.bits_compared || 0
+        ).toLocaleString()
+      );
+
+      set(
+        'berReference',
+        Number(
+          ber.reference_bits || 0
+        ).toLocaleString()
+      );
+
+      set(
+        'berRecovered',
+        Number(
+          ber.recovered_bits || 0
+        ).toLocaleString()
+      );
+
+    }else{
+
+      set(
+        'berStatus',
+        ber.reason || 'Reference bitstream required'
+      );
+
+    }
 
 
   /* ----------------------------------------------------------
@@ -3079,6 +3249,11 @@ $('go').onclick = async () => {
   fd.append(
     'iq_format',
     $('iq').value
+  );
+
+  fd.append(
+    'reference_bits',
+    $('referenceBits').value.trim()
   );
 
 
