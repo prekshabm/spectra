@@ -372,49 +372,17 @@ def _qam_level_bits(level):
     return [1, 0]
 
 
-def _demod_16qam(
-    symbols,
-    reference_bits=None
-):
+def _demod_16qam(symbols):
     """
-    16-QAM demodulation with blind phase estimation.
-
-    Without a reference, square 16-QAM has an inherent
-    90-degree rotational ambiguity.
-
-    When reference_bits are supplied, the four possible
-    90-degree rotations are tested and the best matching
-    hypothesis is selected.
+    16-QAM decision using four amplitude levels
+    on I and Q.
     """
 
-    # --------------------------------------------------------
-    # Blind phase estimation
-    # --------------------------------------------------------
-
+    # Estimate fourth-order phase.
     z4 = symbols ** 4
-    moment = np.mean(z4)
 
-    if (
-        np.isfinite(np.real(moment))
-        and
-        np.isfinite(np.imag(moment))
-        and
-        abs(moment) > 1e-8
-    ):
-        rotation = (
-            np.angle(moment)
-            - np.pi
-        ) / 4.0
-    else:
-        rotation = 0.0
+    rotation = 0.0
 
-    while rotation <= -np.pi / 4.0:
-        rotation += np.pi / 2.0
-
-    while rotation > np.pi / 4.0:
-        rotation -= np.pi / 2.0
-
-    # Apply blind phase correction.
     z = (
         symbols
         *
@@ -423,10 +391,7 @@ def _demod_16qam(
         )
     )
 
-    # --------------------------------------------------------
-    # Robust amplitude scaling
-    # --------------------------------------------------------
-
+    # Robust amplitude scaling.
     scale = (
         np.percentile(
             np.abs(z),
@@ -445,250 +410,36 @@ def _demod_16qam(
 
     z = z / scale
 
-    # --------------------------------------------------------
-    # Demodulate one phase hypothesis
-    # --------------------------------------------------------
+    bits = []
 
-    def demod_with_extra_rotation(
-        extra_rotation
-    ):
+    for v in z:
 
-        zz = (
-            z
-            *
-            np.exp(
-                -1j * extra_rotation
+        i_level = _quantize_qam(
+            np.real(v)
+        )
+
+        q_level = _quantize_qam(
+            np.imag(v)
+        )
+
+        # I then Q, 2 bits each.
+        bits.extend(
+            _qam_level_bits(
+                i_level
             )
         )
 
-        bits = []
-
-        for v in zz:
-
-            i_level = _quantize_qam(
-                np.real(v)
+        bits.extend(
+            _qam_level_bits(
+                q_level
             )
-
-            q_level = _quantize_qam(
-                np.imag(v)
-            )
-
-            bits.extend(
-                _qam_level_bits(
-                    i_level
-                )
-            )
-
-            bits.extend(
-                _qam_level_bits(
-                    q_level
-                )
-            )
-
-        return np.asarray(
-            bits,
-            dtype=np.uint8
         )
 
-    # Blind result.
-    bits = demod_with_extra_rotation(
-        0.0
+    return np.asarray(
+        bits,
+        dtype=np.uint8
     )
 
-    phase_info = {
-        "phase_rotation_deg": round(
-            float(
-                np.rad2deg(rotation)
-            ),
-            4
-        ),
-        "phase_ambiguity_deg": 90.0,
-        "phase_ambiguous": True,
-        "phase_method": (
-            "16-QAM fourth-order moment"
-        ),
-        "phase_reference_used": False,
-        "phase_reference_score": None,
-        "phase_ambiguity_resolved": False,
-    }
-
-    # --------------------------------------------------------
-    # Convert optional reference bits
-    # --------------------------------------------------------
-
-    reference = None
-
-    if reference_bits is not None:
-
-        if isinstance(
-            reference_bits,
-            str
-        ):
-
-            clean = "".join(
-                ch
-                for ch in reference_bits
-                if ch in "01"
-            )
-
-            if clean:
-
-                reference = np.fromiter(
-                    (
-                        int(ch)
-                        for ch in clean
-                    ),
-                    dtype=np.uint8
-                )
-
-        else:
-
-            reference = np.asarray(
-                reference_bits,
-                dtype=np.uint8
-            ).reshape(-1)
-
-            reference = reference[
-                (reference == 0)
-                |
-                (reference == 1)
-            ]
-
-    # --------------------------------------------------------
-    # Resolve 90-degree ambiguity using reference
-    # --------------------------------------------------------
-
-    if (
-        reference is not None
-        and
-        reference.size > 0
-        and
-        bits.size > 0
-    ):
-
-        candidates = []
-
-        for k in range(4):
-
-            extra_rotation = (
-                k * np.pi / 2.0
-            )
-
-            candidate_bits = (
-                demod_with_extra_rotation(
-                    extra_rotation
-                )
-            )
-
-            n = min(
-                reference.size,
-                candidate_bits.size
-            )
-
-            if n <= 0:
-                continue
-
-            score = float(
-                np.mean(
-                    candidate_bits[:n]
-                    ==
-                    reference[:n]
-                )
-            )
-
-            candidates.append(
-                (
-                    score,
-                    k,
-                    candidate_bits
-                )
-            )
-
-        if candidates:
-
-            candidates.sort(
-                key=lambda item: item[0],
-                reverse=True
-            )
-
-            best_score, best_k, best_bits = (
-                candidates[0]
-            )
-
-            second_score = (
-                candidates[1][0]
-                if len(candidates) > 1
-                else 0.0
-            )
-
-            phase_info[
-                "phase_reference_used"
-            ] = True
-
-            phase_info[
-                "phase_reference_score"
-            ] = round(
-                best_score,
-                4
-            )
-
-            # Require both a strong match and a clear
-            # separation from the next hypothesis.
-            if (
-                best_score >= 0.80
-                and
-                (best_score - second_score) >= 0.15
-            ):
-
-                bits = best_bits
-
-                total_rotation = (
-                    rotation
-                    +
-                    best_k * np.pi / 2.0
-                )
-
-                total_deg = float(
-                    np.rad2deg(
-                        total_rotation
-                    )
-                )
-
-                while total_deg <= -180.0:
-                    total_deg += 360.0
-
-                while total_deg > 180.0:
-                    total_deg -= 360.0
-
-                phase_info[
-                    "phase_rotation_deg"
-                ] = round(
-                    total_deg,
-                    4
-                )
-
-                phase_info[
-                    "phase_ambiguous"
-                ] = False
-
-                phase_info[
-                    "phase_ambiguity_resolved"
-                ] = True
-
-                phase_info[
-                    "phase_method"
-                ] = (
-                    "16-QAM fourth-order moment "
-                    "+ reference-bit resolution"
-                )
-
-    return (
-        np.asarray(
-            bits,
-            dtype=np.uint8
-        ),
-        phase_info
-    )
 
 # ============================================================
 # FSK
@@ -1015,8 +766,7 @@ def demodulate(
     signal,
     modulation,
     fs,
-    symbol_rate=None,
-    reference_bits=None
+    symbol_rate=None
 ):
     """
     Demodulate a received IQ signal.
@@ -1128,9 +878,8 @@ def demodulate(
 
         elif modulation == "16-QAM":
 
-            bits, qam_phase_info = _demod_16qam(
-                symbols,
-                reference_bits=reference_bits
+            bits = _demod_16qam(
+                symbols
             )
 
         else:
@@ -1139,9 +888,6 @@ def demodulate(
                 f"Unsupported modulation: "
                 f"{modulation}"
             )
-
-    if modulation != "16-QAM":
-        qam_phase_info = {}
 
     bits = np.asarray(
         bits,
@@ -1173,62 +919,6 @@ def demodulate(
 
     return {
         "modulation": modulation,
-
-        "phase_rotation_deg": (
-            qam_phase_info.get(
-                "phase_rotation_deg"
-            )
-            if modulation == "16-QAM"
-            else None
-        ),
-
-        "phase_ambiguity_deg": (
-            qam_phase_info.get(
-                "phase_ambiguity_deg"
-            )
-            if modulation == "16-QAM"
-            else None
-        ),
-
-        "phase_ambiguous": (
-            qam_phase_info.get(
-                "phase_ambiguous"
-            )
-            if modulation == "16-QAM"
-            else False
-        ),
-
-        "phase_method": (
-            qam_phase_info.get(
-                "phase_method"
-            )
-            if modulation == "16-QAM"
-            else None
-        ),
-
-        "phase_reference_used": (
-            qam_phase_info.get(
-                "phase_reference_used"
-            )
-            if modulation == "16-QAM"
-            else False
-        ),
-
-        "phase_reference_score": (
-            qam_phase_info.get(
-                "phase_reference_score"
-            )
-            if modulation == "16-QAM"
-            else None
-        ),
-
-        "phase_ambiguity_resolved": (
-            qam_phase_info.get(
-                "phase_ambiguity_resolved"
-            )
-            if modulation == "16-QAM"
-            else False
-        ),
 
         "sample_rate": float(fs),
 
