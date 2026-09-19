@@ -1076,6 +1076,47 @@ async def analyze(
                     "bitstream",
                     ""
                 )
+                # ------------------------------------------------
+                # BER
+                # ------------------------------------------------
+
+                ber_result = {
+                    "available": False,
+                    "reason": "Reference bitstream required for BER calculation."
+                }
+
+                if bitstream and reference_bits.strip():
+
+                    reference = "".join(
+                        b for b in reference_bits
+                        if b in ("0", "1")
+                    )
+
+                    recovered = "".join(
+                        b for b in str(bitstream)
+                        if b in ("0", "1")
+                    )
+
+                    compared_bits = min(
+                        len(reference),
+                        len(recovered)
+                    )
+
+                    if compared_bits > 0:
+
+                        errors = sum(
+                            reference[i] != recovered[i]
+                            for i in range(compared_bits)
+                        )
+
+                        ber_result = {
+                            "available": True,
+                            "bit_errors": errors,
+                            "bits_compared": compared_bits,
+                            "reference_bits": len(reference),
+                            "recovered_bits": len(recovered),
+                            "ber": errors / compared_bits
+                        }
 
                 bitstream_analysis = {
                     "available": False,
@@ -1267,6 +1308,8 @@ async def analyze(
             "demodulation": demod_result,
 
             "bitstream_analysis": bitstream_analysis,
+
+            "ber": ber_result,
 
             "fec": fec_result,
 
