@@ -30,7 +30,7 @@ def estimate_frequency_offset(
         order = 4
 
     else:
-        order = 2
+        return 0.0
 
     z = x ** order
 
