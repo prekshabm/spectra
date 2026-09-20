@@ -58,6 +58,219 @@ def _clean_signal(signal):
     return x / rms
 
 
+def _estimate_frequency_offset(
+    signal,
+    fs,
+    modulation
+):
+    """
+    Estimate common carrier/frequency offset from complex IQ.
+
+    Most adjacent samples belong to the same symbol when the
+    signal is oversampled. Their phase increment therefore
+    contains mainly the carrier frequency offset, while symbol
+    transitions form smaller secondary clusters.
+
+    A histogram of phase increments is used to find the dominant
+    cluster and obtain a robust CFO estimate.
+    """
+
+    if modulation not in (
+        "BPSK",
+        "QPSK",
+        "16-QAM",
+    ):
+        return 0.0
+
+    if (
+        len(signal) < 32
+        or
+        not np.isfinite(fs)
+        or
+        fs <= 0
+    ):
+        return 0.0
+
+    x = np.asarray(
+        signal,
+        dtype=np.complex128
+    )
+
+    phase_steps = np.angle(
+        x[1:]
+        *
+        np.conj(
+            x[:-1]
+        )
+    )
+
+    magnitudes = (
+        np.abs(x[1:])
+        *
+        np.abs(x[:-1])
+    )
+
+    valid = (
+        np.isfinite(phase_steps)
+        &
+        np.isfinite(magnitudes)
+        &
+        (magnitudes > 1e-6)
+    )
+
+    phase_steps = phase_steps[valid]
+    magnitudes = magnitudes[valid]
+
+    if len(phase_steps) < 32:
+        return 0.0
+
+    # Find the dominant phase-increment cluster.
+    bins = 512
+
+    histogram, edges = np.histogram(
+        phase_steps,
+        bins=bins,
+        range=(-np.pi, np.pi),
+        weights=magnitudes
+    )
+
+    peak = int(
+        np.argmax(histogram)
+    )
+
+    center = (
+        edges[peak]
+        +
+        edges[peak + 1]
+    ) / 2.0
+
+    bin_width = (
+        edges[1]
+        -
+        edges[0]
+    )
+
+    # Keep samples close to the dominant cluster.
+    # This rejects symbol-transition phase jumps.
+    wrapped_distance = np.angle(
+        np.exp(
+            1j
+            *
+            (
+                phase_steps
+                -
+                center
+            )
+        )
+    )
+
+    keep = (
+        np.abs(
+            wrapped_distance
+        )
+        <=
+        2.5 * bin_width
+    )
+
+    selected = phase_steps[keep]
+    selected_weights = magnitudes[keep]
+
+    if len(selected) < 16:
+        selected = phase_steps
+        selected_weights = magnitudes
+
+    # Circular weighted mean gives a precise phase increment.
+    vector = np.sum(
+        selected_weights
+        *
+        np.exp(
+            1j * selected
+        )
+    )
+
+    if abs(vector) < 1e-12:
+        return 0.0
+
+    phase_increment = float(
+        np.angle(vector)
+    )
+
+    frequency_offset = (
+        phase_increment
+        *
+        float(fs)
+        /
+        (2.0 * np.pi)
+    )
+
+    # Principal Nyquist interval.
+    half_fs = (
+        float(fs)
+        / 2.0
+    )
+
+    frequency_offset = (
+        (
+            frequency_offset
+            +
+            half_fs
+        )
+        %
+        float(fs)
+    ) - half_fs
+
+    return float(
+        frequency_offset
+    )
+
+
+
+def _correct_frequency_offset(
+    signal,
+    fs,
+    frequency_offset
+):
+    """
+    Remove a constant frequency offset from complex IQ.
+    """
+
+    if (
+        len(signal) == 0
+        or
+        not np.isfinite(frequency_offset)
+        or
+        not np.isfinite(fs)
+        or
+        fs <= 0
+    ):
+        return signal
+
+    n = np.arange(
+        len(signal),
+        dtype=float
+    )
+
+    correction = np.exp(
+        -1j
+        *
+        2.0
+        *
+        np.pi
+        *
+        frequency_offset
+        *
+        n
+        /
+        float(fs)
+    )
+
+    return (
+        signal
+        *
+        correction
+    )
+
+
 def _safe_sps(symbol_rate, fs):
     """Calculate samples/symbol safely."""
 
@@ -1082,6 +1295,32 @@ def demodulate(
     )
 
     # --------------------------------------------------------
+    # Frequency-offset correction
+    # --------------------------------------------------------
+
+    frequency_offset_hz = 0.0
+
+    if modulation in (
+        "BPSK",
+        "QPSK",
+        "16-QAM",
+    ):
+
+        frequency_offset_hz = (
+            _estimate_frequency_offset(
+                x,
+                fs,
+                modulation
+            )
+        )
+
+        x = _correct_frequency_offset(
+            x,
+            fs,
+            frequency_offset_hz
+        )
+
+    # --------------------------------------------------------
     # FSK
     # --------------------------------------------------------
 
@@ -1231,6 +1470,21 @@ def demodulate(
         ),
 
         "sample_rate": float(fs),
+
+        "frequency_offset_hz": round(
+            float(
+                frequency_offset_hz
+            ),
+            2
+        ),
+
+        "frequency_offset_corrected": (
+            modulation in (
+                "BPSK",
+                "QPSK",
+                "16-QAM",
+            )
+        ),
 
         "symbol_rate": (
             float(symbol_rate)
