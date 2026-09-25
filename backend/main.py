@@ -1025,7 +1025,14 @@ async def analyze(
         modulation = cls.get(
             "detected"
         )
-
+        result["modulation"] = modulation
+        result["modulation_confidence"] = cls.get(
+            "confidence"
+        )
+        result["modulation_candidates"] = cls.get(
+            "candidates",
+            []
+        )
         demod_result = {
             "available": False,
             "reason": "No modulation classification available."
@@ -1063,7 +1070,8 @@ async def analyze(
                     sig,
                     modulation,
                     fs,
-                    symbol_rate
+                    symbol_rate,
+                    reference_bits
                 )
 
                 demod_result["available"] = True
