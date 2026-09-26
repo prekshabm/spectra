@@ -105,7 +105,8 @@ def _estimate_sps(symbol_rate, fs, modulation=None):
                         return sps
 
                 else:
-                    return sps
+                    if 4.0 <= sps <= 32.0:
+                        return sps
 
         except Exception:
             pass
@@ -1075,8 +1076,8 @@ def demodulate(
         "synchronization_applied": True,
 
         "symbol_rate": (
-            float(symbol_rate)
-            if symbol_rate is not None
+            float(fs) / float(sps)
+            if sps is not None
             else None
         ),
 
