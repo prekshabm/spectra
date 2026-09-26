@@ -718,6 +718,37 @@ def detect_interleaving_type(
 
 
             # ------------------------------------------------
+            # FEC VALIDATION
+            # ------------------------------------------------
+
+            fec_result = analyze_fec(candidate_bits)
+
+            viterbi = fec_result.get(
+                "convolutional_viterbi",
+                {}
+            )
+
+            viterbi_status = viterbi.get(
+                "decoder_status",
+                "NOT_AVAILABLE"
+            )
+
+            viterbi_best = viterbi.get(
+                "best"
+            ) or {}
+
+            fec_validated = (
+                viterbi_status == "VALIDATED"
+            )
+
+            fec_evidence = float(
+                viterbi_best.get(
+                    "evidence",
+                    0.0
+                ) or 0.0
+            )
+
+            # ------------------------------------------------
             # FINAL CANDIDATE SCORE
             # ------------------------------------------------
 
@@ -736,6 +767,15 @@ def detect_interleaving_type(
                 "structural_score": round(
                     float(structure),
                     4
+                ),
+                "fec_validated": fec_validated,
+                "fec_evidence": round(
+                    fec_evidence,
+                    4
+                ),
+                "fec_family": fec_result.get(
+                    "identified_fec_family",
+                    "UNKNOWN"
                 ),
                 "length_compatible": True,
                 "input_bits": input_length,
@@ -791,6 +831,99 @@ def detect_interleaving_type(
                 "could be evaluated."
             ),
             "candidates": candidates
+        }
+
+
+    # --------------------------------------------------------
+    # FEC-VALIDATED INTERLEAVING
+    # --------------------------------------------------------
+
+    fec_validated_candidates = [
+        candidate
+        for candidate in valid_candidates
+        if candidate.get(
+            "fec_validated",
+            False
+        )
+    ]
+
+    if len(fec_validated_candidates) == 1:
+
+        best = fec_validated_candidates[0]
+
+        best_score = float(
+            best.get("score", 0.0)
+        )
+
+        margin = 1.0
+
+        confidence = 1.0
+
+        detected = True
+
+        detected_type = best["type"]
+
+        reason = (
+            "Interleaving type validated through "
+            "FEC decoding evidence."
+        )
+
+        selected_bitstream = best["bitstream"]
+
+        parameters = best["parameters"]
+
+        candidate_summary = [
+            {
+                "type": candidate["type"],
+                "score": candidate.get("score", 0.0),
+                "structural_score": candidate.get(
+                    "structural_score",
+                    0.0
+                ),
+                "fec_validated": candidate.get(
+                    "fec_validated",
+                    False
+                ),
+                "fec_evidence": candidate.get(
+                    "fec_evidence",
+                    0.0
+                ),
+                "fec_family": candidate.get(
+                    "fec_family",
+                    "UNKNOWN"
+                ),
+                "length_compatible": candidate.get(
+                    "length_compatible",
+                    False
+                ),
+                "input_bits": candidate.get(
+                    "input_bits"
+                ),
+                "output_bits": candidate.get(
+                    "output_bits"
+                ),
+                "parameters": candidate.get(
+                    "parameters",
+                    {}
+                )
+            }
+            for candidate in candidates
+        ]
+
+        return {
+            "available": True,
+            "detected": detected,
+            "type": detected_type,
+            "confidence": confidence,
+            "score": round(
+                best_score,
+                4
+            ),
+            "margin": margin,
+            "reason": reason,
+            "candidates": candidate_summary,
+            "selected_bitstream": selected_bitstream,
+            "parameters": parameters
         }
 
 
