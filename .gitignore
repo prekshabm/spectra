@@ -3,3 +3,9 @@ __pycache__/
 *.pyc
 models/*.joblib
 .env
+
+# Local test artifacts
+backend/ml/*_training.joblib
+*.iq
+*.npy
+qpsk_reference_bits.txt
