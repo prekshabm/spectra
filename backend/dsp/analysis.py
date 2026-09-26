@@ -102,6 +102,72 @@ def _quadratic_peak(f, p_db, k):
     df = f[1] - f[0] if len(f) > 1 else 0.0
     return float(f[k] + delta * df)
 
+def _estimate_symbol_rate_timing(x, fs):
+    """Estimate symbol rate from signal timing periodicity."""
+
+    x = np.asarray(x, dtype=np.complex64)
+
+    if len(x) < 2048:
+        return None
+
+    x = x[:200000]
+    x = x - np.mean(x)
+
+    # Normalize
+    rms = np.sqrt(
+        np.mean(np.abs(x) ** 2)
+    )
+
+    if rms < 1e-12:
+        return None
+
+    x = x / rms
+
+    # Differential phase removes the absolute carrier phase.
+    phase = np.angle(
+        x[1:] * np.conj(x[:-1])
+    )
+
+    # Remove mean frequency rotation.
+    phase -= np.mean(phase)
+
+    # Timing transitions create periodic structure.
+    phase_power = phase ** 2
+
+    # FFT of timing-error energy.
+    spectrum = np.abs(
+        np.fft.rfft(phase_power)
+    )
+
+    freq = np.fft.rfftfreq(
+        len(phase_power),
+        1.0 / fs
+    )
+
+    # Search practical symbol-rate range.
+    mask = (
+        (freq >= 5e3) &
+        (freq <= fs / 2.0)
+    )
+
+    if not np.any(mask):
+        return None
+
+    f = freq[mask]
+    s = spectrum[mask]
+
+    # Find strongest timing periodicity.
+    index = np.argmax(s)
+
+    rate = float(f[index])
+
+    if not (
+        1e3 <= rate <= fs / 2.0
+    ):
+        return None
+
+    return rate
+
 
 def _estimate_symbol_rate(x, fs):
     """Estimate symbol rate using squared-signal spectral analysis."""
@@ -334,7 +400,16 @@ def analyze_signal(x, fs):
     dphi = np.angle(x0[1:] * np.conj(x0[:-1]))
     freq_inst = np.diff(phase) * fs / (2.0 * np.pi)
     freq_std = float(np.std(freq_inst)) if len(freq_inst) else 0.0
-    sym_rate = _estimate_symbol_rate(x0, fs)
+    sym_rate = _estimate_symbol_rate_timing(
+        x0,
+        fs
+    )
+
+    if sym_rate is None:
+        sym_rate = _estimate_symbol_rate(
+            x0,
+            fs
+        )
 
     # Visualization payloads are downsampled.
     keep = min(n, 20000)

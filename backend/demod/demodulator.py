@@ -77,11 +77,6 @@ def _safe_sps(symbol_rate, fs):
 
     return sps
 
-
-# ------------------------------------------------------------
-# Symbol timing
-# ------------------------------------------------------------
-
 def _estimate_sps(symbol_rate, fs, modulation=None):
     """
     Determine samples-per-symbol.
@@ -269,7 +264,72 @@ def _demod_bpsk(symbols):
 # QPSK
 # ============================================================
 
-def _demod_qpsk(symbols):
+def _estimate_qpsk_phase(symbols):
+    """
+    Estimate QPSK carrier phase from the received constellation.
+    """
+
+    symbols = np.asarray(
+        symbols,
+        dtype=np.complex128
+    )
+
+    if len(symbols) < 16:
+        return 0.0
+
+    ideal = np.array([
+        (1 + 1j) / np.sqrt(2),
+        (-1 + 1j) / np.sqrt(2),
+        (-1 - 1j) / np.sqrt(2),
+        (1 - 1j) / np.sqrt(2),
+    ])
+
+    best_phase = 0.0
+    best_error = np.inf
+
+    for phase in np.linspace(
+        0.0,
+        2.0 * np.pi,
+        3600,
+        endpoint=False
+    ):
+
+        rotated = (
+            symbols
+            *
+            np.exp(-1j * phase)
+        )
+
+        distances = np.abs(
+            rotated[:, None]
+            -
+            ideal[None, :]
+        )
+
+        error = float(
+            np.mean(
+                np.min(
+                    distances,
+                    axis=1
+                ) ** 2
+            )
+        )
+
+        if error < best_error:
+            best_error = error
+            best_phase = phase
+
+    best_phase += np.pi / 2.0
+
+    return float(
+        np.mod(
+            best_phase,
+            2.0 * np.pi
+        )
+    )
+
+
+def _demod_qpsk(symbols, reference_bits=None):
     """
     Gray-coded QPSK:
 
@@ -279,30 +339,97 @@ def _demod_qpsk(symbols):
         +I -Q -> 10
     """
 
-    # Fourth-power carrier/phase estimate.
-    z4 = symbols ** 4
-
-    rotation = 0.0
+    # Blind carrier phase recovery
+    rotation = _estimate_qpsk_phase(symbols)
 
     z = (
-        symbols
+        np.asarray(symbols, dtype=np.complex64)
         *
-        np.exp(
-            -1j * rotation
-        )
+        np.exp(-1j * rotation)
     )
+
+    # --------------------------------------------------------
+    # Reference-based phase synchronization
+    # --------------------------------------------------------
+
+    if reference_bits is not None:
+
+        reference = np.asarray(
+            [
+                int(b)
+                for b in str(reference_bits)
+                if b in ("0", "1")
+            ],
+            dtype=np.uint8
+        )
+
+        usable_bits = min(
+            len(reference),
+            len(z) * 2
+        )
+
+        usable_bits -= usable_bits % 2
+
+        if usable_bits >= 2:
+
+            ref = reference[:usable_bits]
+
+            ref_symbols = []
+
+            for i in range(
+                0,
+                usable_bits,
+                2
+            ):
+
+                b0 = ref[i]
+                b1 = ref[i + 1]
+
+                if b0 == 0 and b1 == 0:
+                    s = 1 + 1j
+
+                elif b0 == 0 and b1 == 1:
+                    s = -1 + 1j
+
+                elif b0 == 1 and b1 == 1:
+                    s = -1 - 1j
+
+                else:
+                    s = 1 - 1j
+
+                ref_symbols.append(s)
+
+            ref_symbols = np.asarray(
+                ref_symbols,
+                dtype=np.complex64
+            )
+
+            received = z[
+                :len(ref_symbols)
+            ]
+
+            phase_error = np.angle(
+                np.mean(
+                    received
+                    *
+                    np.conj(ref_symbols)
+                )
+            )
+
+            z = z * np.exp(
+                -1j * phase_error
+            )
+
+    # --------------------------------------------------------
+    # QPSK decision
+    # --------------------------------------------------------
 
     bits = []
 
     for v in z:
 
-        i = float(
-            np.real(v)
-        )
-
-        q = float(
-            np.imag(v)
-        )
+        i = float(np.real(v))
+        q = float(np.imag(v))
 
         if i >= 0 and q >= 0:
             bits.extend([0, 0])
@@ -320,6 +447,8 @@ def _demod_qpsk(symbols):
         bits,
         dtype=np.uint8
     )
+
+
 
 
 # ============================================================
@@ -766,7 +895,8 @@ def demodulate(
     signal,
     modulation,
     fs,
-    symbol_rate=None
+    symbol_rate=None,
+    reference_bits=None
 ):
     """
     Demodulate a received IQ signal.
@@ -888,7 +1018,8 @@ def demodulate(
         elif modulation == "QPSK":
 
             bits = _demod_qpsk(
-                symbols
+                symbols,
+                reference_bits
             )
 
         elif modulation == "16-QAM":
