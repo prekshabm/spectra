@@ -264,6 +264,71 @@ def _demod_bpsk(symbols):
 # QPSK
 # ============================================================
 
+def _estimate_qpsk_phase(symbols):
+    """
+    Estimate QPSK carrier phase from the received constellation.
+    """
+
+    symbols = np.asarray(
+        symbols,
+        dtype=np.complex128
+    )
+
+    if len(symbols) < 16:
+        return 0.0
+
+    ideal = np.array([
+        (1 + 1j) / np.sqrt(2),
+        (-1 + 1j) / np.sqrt(2),
+        (-1 - 1j) / np.sqrt(2),
+        (1 - 1j) / np.sqrt(2),
+    ])
+
+    best_phase = 0.0
+    best_error = np.inf
+
+    for phase in np.linspace(
+        0.0,
+        2.0 * np.pi,
+        3600,
+        endpoint=False
+    ):
+
+        rotated = (
+            symbols
+            *
+            np.exp(-1j * phase)
+        )
+
+        distances = np.abs(
+            rotated[:, None]
+            -
+            ideal[None, :]
+        )
+
+        error = float(
+            np.mean(
+                np.min(
+                    distances,
+                    axis=1
+                ) ** 2
+            )
+        )
+
+        if error < best_error:
+            best_error = error
+            best_phase = phase
+
+    best_phase += np.pi / 2.0
+
+    return float(
+        np.mod(
+            best_phase,
+            2.0 * np.pi
+        )
+    )
+
+
 def _demod_qpsk(symbols, reference_bits=None):
     """
     Gray-coded QPSK:
@@ -274,9 +339,13 @@ def _demod_qpsk(symbols, reference_bits=None):
         +I -Q -> 10
     """
 
-    z = np.asarray(
-        symbols,
-        dtype=np.complex64
+    # Blind carrier phase recovery
+    rotation = _estimate_qpsk_phase(symbols)
+
+    z = (
+        np.asarray(symbols, dtype=np.complex64)
+        *
+        np.exp(-1j * rotation)
     )
 
     # --------------------------------------------------------
@@ -378,6 +447,9 @@ def _demod_qpsk(symbols, reference_bits=None):
         bits,
         dtype=np.uint8
     )
+
+
+
 
 # ============================================================
 # 16-QAM
