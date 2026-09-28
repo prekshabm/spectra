@@ -12,9 +12,6 @@ from backend.demod.demodulator import demodulate
 from backend.analysis.fec import analyze_fec
 from backend.analysis.interleaving import analyze_interleaving
 from backend.analysis.bitstream import analyze_bitstream
-from backend.analysis.interleaving_detector import (
-    detect_interleaver_from_reference
-)
 
 from backend.analysis.interleavers import (
     block_deinterleave,
@@ -33,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MODEL = (
     ROOT
     / "models"
-    / "modulation_rf_v16_data50_new.joblib"
+    / "modulation_rf.joblib"
 )
 
 
@@ -266,813 +263,7 @@ def apply_deinterleaver(
         f"Unsupported deinterleaving mode: {mode}"
     )
 
-# ============================================================
-# AUTOMATIC INTERLEAVING DETECTION
-# ============================================================
 
-def _bit_array(bitstream):
-    return np.asarray(
-        [int(b) for b in str(bitstream) if b in ("0", "1")],
-        dtype=np.uint8
-    )
-
-
-def _transition_score(bits):
-    if len(bits) < 2:
-        return 0.0
-
-    transitions = np.sum(bits[1:] != bits[:-1])
-    return float(transitions / (len(bits) - 1))
-
-
-def _periodicity_score(bits, max_lag=64):
-    if len(bits) < 16:
-        return 0.0, None
-
-    x = (2.0 * bits.astype(np.float64)) - 1.0
-    x = x - np.mean(x)
-
-    energy = np.sum(x * x)
-
-    if energy <= 0:
-        return 0.0, None
-
-    best_score = 0.0
-    best_lag = None
-
-    upper = min(max_lag, len(x) // 2)
-
-    for lag in range(1, upper + 1):
-        a = x[:-lag]
-        b = x[lag:]
-
-        denom = np.sqrt(
-            np.sum(a * a) *
-            np.sum(b * b)
-        )
-
-        if denom <= 0:
-            continue
-
-        score = abs(float(np.sum(a * b) / denom))
-
-        if score > best_score:
-            best_score = score
-            best_lag = lag
-
-    return best_score, best_lag
-
-
-def _structure_score(bitstream):
-    """
-    Heuristic score used to compare candidate
-    de-interleaved bitstreams.
-
-    This is evidence-based and does not prove
-    the true interleaving structure.
-    """
-
-    bits = _bit_array(bitstream)
-
-    if len(bits) < 32:
-        return 0.0
-
-    periodicity, _ = _periodicity_score(bits)
-    transition = _transition_score(bits)
-
-    ones_ratio = float(np.mean(bits))
-
-    balance = 1.0 - abs(ones_ratio - 0.5) * 2.0
-    balance = max(0.0, min(1.0, balance))
-
-    score = (
-        0.60 * periodicity +
-        0.20 * balance +
-        0.20 * (1.0 - abs(transition - 0.5) * 2.0)
-    )
-
-    return float(max(0.0, min(1.0, score)))
-
-# ============================================================
-# AUTOMATIC INTERLEAVING DETECTION
-# ============================================================
-
-def _bit_array(bitstream):
-    return np.asarray(
-        [
-            int(b)
-            for b in str(bitstream)
-            if b in ("0", "1")
-        ],
-        dtype=np.uint8
-    )
-
-
-def _transition_score(bits):
-    if len(bits) < 2:
-        return 0.0
-
-    return float(
-        np.mean(bits[1:] != bits[:-1])
-    )
-
-
-def _autocorrelation_score(bits, max_lag=64):
-    """
-    Measures periodic structure in a bitstream.
-    """
-
-    if len(bits) < 32:
-        return 0.0
-
-    x = (
-        2.0 * bits.astype(np.float64)
-    ) - 1.0
-
-    x -= np.mean(x)
-
-    energy = np.sum(x * x)
-
-    if energy <= 0:
-        return 0.0
-
-    best = 0.0
-
-    upper = min(
-        max_lag,
-        len(x) // 2
-    )
-
-    for lag in range(1, upper + 1):
-
-        a = x[:-lag]
-        b = x[lag:]
-
-        denom = np.sqrt(
-            np.sum(a * a) *
-            np.sum(b * b)
-        )
-
-        if denom <= 0:
-            continue
-
-        corr = abs(
-            float(
-                np.sum(a * b) / denom
-            )
-        )
-
-        best = max(
-            best,
-            corr
-        )
-
-    return float(best)
-
-
-def _structure_score(bitstream):
-    """
-    Estimate how much deterministic structure exists
-    in a candidate recovered bitstream.
-
-    This is a heuristic metric and does not by itself
-    prove the interleaving type.
-    """
-
-    bits = _bit_array(bitstream)
-
-    if len(bits) < 32:
-        return 0.0
-
-    transition = _transition_score(
-        bits
-    )
-
-    periodicity = _autocorrelation_score(
-        bits
-    )
-
-    ones_ratio = float(
-        np.mean(bits)
-    )
-
-    balance = (
-        1.0
-        - abs(ones_ratio - 0.5) * 2.0
-    )
-
-    balance = max(
-        0.0,
-        min(1.0, balance)
-    )
-
-    transition_structure = (
-        1.0
-        - abs(transition - 0.5) * 2.0
-    )
-
-    score = (
-        0.50 * periodicity
-        + 0.25 * balance
-        + 0.25 * transition_structure
-    )
-
-    return float(
-        max(
-            0.0,
-            min(1.0, score)
-        )
-    )
-
-
-def detect_interleaving_type(
-    bitstream,
-    rows=8,
-    branches=4,
-    delay=3,
-    seed=42,
-    min_confidence=0.80
-):
-    """
-    Evidence-based automatic interleaving detector.
-
-    Supported hypotheses:
-        BLOCK
-        CONVOLUTIONAL
-        DIAGONAL
-        PSEUDO-RANDOM
-
-    The detector tests each supported de-interleaver
-    and compares the resulting candidate bitstreams.
-
-    It abstains when the evidence is insufficient.
-    """
-
-    bits = _bit_array(
-        bitstream
-    )
-
-    input_length = len(bits)
-
-    if input_length < 32:
-
-        return {
-            "available": True,
-            "detected": False,
-            "type": "NOT_CONFIDENTLY_IDENTIFIED",
-            "confidence": 0.0,
-            "score": None,
-            "margin": None,
-            "reason": (
-                "Insufficient recovered bits for "
-                "interleaving hypothesis testing."
-            ),
-            "candidates": []
-        }
-
-
-    # --------------------------------------------------------
-    # TEST EACH HYPOTHESIS
-    # --------------------------------------------------------
-
-    hypotheses = [
-        {
-            "mode": "block",
-            "name": "BLOCK",
-            "rows": rows,
-            "branches": branches,
-            "delay": delay,
-            "seed": seed
-        },
-
-        {
-            "mode": "convolutional",
-            "name": "CONVOLUTIONAL",
-            "rows": rows,
-            "branches": branches,
-            "delay": delay,
-            "seed": seed
-        },
-
-        {
-            "mode": "diagonal",
-            "name": "DIAGONAL",
-            "rows": rows,
-            "branches": branches,
-            "delay": delay,
-            "seed": seed
-        },
-
-        {
-            "mode": "pseudo-random",
-            "name": "PSEUDO-RANDOM",
-            "rows": rows,
-            "branches": branches,
-            "delay": delay,
-            "seed": seed
-        }
-    ]
-
-
-    candidates = []
-
-
-    for hypothesis in hypotheses:
-
-        mode = hypothesis["mode"]
-
-        try:
-
-            # ------------------------------------------------
-            # LENGTH COMPATIBILITY
-            # ------------------------------------------------
-
-            compatible = True
-
-            if mode in (
-                "block",
-                "diagonal"
-            ):
-
-                if input_length % rows != 0:
-                    compatible = False
-
-            elif mode == "convolutional":
-
-                flush_length = (
-                    delay
-                    * branches
-                    * (branches - 1)
-                    // 2
-                )
-
-                if input_length < flush_length:
-                    compatible = False
-
-            elif mode == "pseudo-random":
-
-                compatible = (
-                    input_length > 0
-                )
-
-
-            if not compatible:
-
-                candidates.append({
-                    "type": hypothesis["name"],
-                    "score": 0.0,
-                    "structural_score": 0.0,
-                    "length_compatible": False,
-                    "parameters": {}
-                })
-
-                continue
-
-
-            # ------------------------------------------------
-            # APPLY DEINTERLEAVER
-            # ------------------------------------------------
-
-            result = apply_deinterleaver(
-                bitstream=bitstream,
-                mode=mode,
-                rows=rows,
-                branches=branches,
-                delay=delay,
-                seed=seed
-            )
-
-
-            if not result.get(
-                "success",
-                False
-            ):
-
-                candidates.append({
-                    "type": hypothesis["name"],
-                    "score": 0.0,
-                    "structural_score": 0.0,
-                    "length_compatible": True,
-                    "parameters": {},
-                    "reason": result.get(
-                        "reason",
-                        "Deinterleaving failed."
-                    )
-                })
-
-                continue
-
-
-            candidate_bits = result.get(
-                "bitstream",
-                ""
-            )
-
-
-            # ------------------------------------------------
-            # STRUCTURE SCORE
-            # ------------------------------------------------
-
-            structure = _structure_score(
-                candidate_bits
-            )
-
-
-            # ------------------------------------------------
-            # LENGTH SCORE
-            # ------------------------------------------------
-
-            output_length = len(
-                _bit_array(
-                    candidate_bits
-                )
-            )
-
-            if mode == "convolutional":
-
-                expected_output_length = (
-                    input_length
-                    - (
-                        delay
-                        * branches
-                        * (branches - 1)
-                        // 2
-                    )
-                )
-
-                length_score = (
-                    1.0
-                    if output_length
-                    == expected_output_length
-                    else 0.0
-                )
-
-            else:
-
-                length_score = (
-                    1.0
-                    if output_length
-                    == input_length
-                    else 0.0
-                )
-
-
-            # ------------------------------------------------
-            # FEC VALIDATION
-            # ------------------------------------------------
-
-            fec_result = analyze_fec(candidate_bits)
-
-            viterbi = fec_result.get(
-                "convolutional_viterbi",
-                {}
-            )
-
-            viterbi_status = viterbi.get(
-                "decoder_status",
-                "NOT_AVAILABLE"
-            )
-
-            viterbi_best = viterbi.get(
-                "best"
-            ) or {}
-
-            fec_validated = (
-                viterbi_status == "VALIDATED"
-            )
-
-            fec_evidence = float(
-                viterbi_best.get(
-                    "evidence",
-                    0.0
-                ) or 0.0
-            )
-
-            # ------------------------------------------------
-            # FINAL CANDIDATE SCORE
-            # ------------------------------------------------
-
-            score = (
-                0.80 * structure
-                + 0.20 * length_score
-            )
-
-
-            candidates.append({
-                "type": hypothesis["name"],
-                "score": round(
-                    float(score),
-                    4
-                ),
-                "structural_score": round(
-                    float(structure),
-                    4
-                ),
-                "fec_validated": fec_validated,
-                "fec_evidence": round(
-                    fec_evidence,
-                    4
-                ),
-                "fec_family": fec_result.get(
-                    "identified_fec_family",
-                    "UNKNOWN"
-                ),
-                "length_compatible": True,
-                "input_bits": input_length,
-                "output_bits": output_length,
-                "parameters": {
-                    "rows": rows,
-                    "branches": branches,
-                    "delay": delay,
-                    "seed": seed
-                },
-                "bitstream": candidate_bits
-            })
-
-
-        except Exception as error:
-
-            candidates.append({
-                "type": hypothesis["name"],
-                "score": 0.0,
-                "structural_score": 0.0,
-                "length_compatible": False,
-                "parameters": {},
-                "reason": str(error)
-            })
-
-
-    # --------------------------------------------------------
-    # NO VALID CANDIDATES
-    # --------------------------------------------------------
-
-    valid_candidates = [
-        candidate
-        for candidate in candidates
-        if candidate.get(
-            "length_compatible",
-            False
-        )
-        and "bitstream" in candidate
-    ]
-
-
-    if not valid_candidates:
-
-        return {
-            "available": True,
-            "detected": False,
-            "type": "NOT_CONFIDENTLY_IDENTIFIED",
-            "confidence": 0.0,
-            "score": None,
-            "margin": None,
-            "reason": (
-                "No valid interleaving hypothesis "
-                "could be evaluated."
-            ),
-            "candidates": candidates
-        }
-
-
-    # --------------------------------------------------------
-    # FEC-VALIDATED INTERLEAVING
-    # --------------------------------------------------------
-
-    fec_validated_candidates = [
-        candidate
-        for candidate in valid_candidates
-        if candidate.get(
-            "fec_validated",
-            False
-        )
-    ]
-
-    if len(fec_validated_candidates) == 1:
-
-        best = fec_validated_candidates[0]
-
-        best_score = float(
-            best.get("score", 0.0)
-        )
-
-        margin = 1.0
-
-        confidence = 1.0
-
-        detected = True
-
-        detected_type = best["type"]
-
-        reason = (
-            "Interleaving type validated through "
-            "FEC decoding evidence."
-        )
-
-        selected_bitstream = best["bitstream"]
-
-        parameters = best["parameters"]
-
-        candidate_summary = [
-            {
-                "type": candidate["type"],
-                "score": candidate.get("score", 0.0),
-                "structural_score": candidate.get(
-                    "structural_score",
-                    0.0
-                ),
-                "fec_validated": candidate.get(
-                    "fec_validated",
-                    False
-                ),
-                "fec_evidence": candidate.get(
-                    "fec_evidence",
-                    0.0
-                ),
-                "fec_family": candidate.get(
-                    "fec_family",
-                    "UNKNOWN"
-                ),
-                "length_compatible": candidate.get(
-                    "length_compatible",
-                    False
-                ),
-                "input_bits": candidate.get(
-                    "input_bits"
-                ),
-                "output_bits": candidate.get(
-                    "output_bits"
-                ),
-                "parameters": candidate.get(
-                    "parameters",
-                    {}
-                )
-            }
-            for candidate in candidates
-        ]
-
-        return {
-            "available": True,
-            "detected": detected,
-            "type": detected_type,
-            "confidence": confidence,
-            "score": round(
-                best_score,
-                4
-            ),
-            "margin": margin,
-            "reason": reason,
-            "candidates": candidate_summary,
-            "selected_bitstream": selected_bitstream,
-            "parameters": parameters
-        }
-
-
-    # --------------------------------------------------------
-    # RANK CANDIDATES
-    # --------------------------------------------------------
-
-    valid_candidates.sort(
-        key=lambda item: item["score"],
-        reverse=True
-    )
-
-
-    best = valid_candidates[0]
-
-    best_score = float(
-        best["score"]
-    )
-
-
-    second_score = (
-        float(
-            valid_candidates[1]["score"]
-        )
-        if len(valid_candidates) > 1
-        else 0.0
-    )
-
-
-    margin = (
-        best_score
-        - second_score
-    )
-
-
-    # --------------------------------------------------------
-    # CONFIDENCE
-    # --------------------------------------------------------
-
-    confidence = min(
-        1.0,
-        max(
-            0.0,
-            0.70 * best_score
-            + 0.30 * margin
-        )
-    )
-
-
-    # --------------------------------------------------------
-    # DECISION
-    # --------------------------------------------------------
-
-    detected = (
-        best_score >= min_confidence
-        and margin >= 0.05
-    )
-
-
-    if detected:
-
-        detected_type = best["type"]
-
-        reason = (
-            "Best-supported interleaving hypothesis "
-            "selected from the supported structures."
-        )
-
-        selected_bitstream = best[
-            "bitstream"
-        ]
-
-        parameters = best[
-            "parameters"
-        ]
-
-    else:
-
-        detected_type = (
-            "NOT_CONFIDENTLY_IDENTIFIED"
-        )
-
-        reason = (
-            "The available evidence is insufficient "
-            "to confidently identify the interleaving "
-            "structure."
-        )
-
-        selected_bitstream = ""
-
-        parameters = {}
-
-
-    # --------------------------------------------------------
-    # CLEAN CANDIDATE OUTPUT
-    # --------------------------------------------------------
-
-    candidate_summary = []
-
-    for candidate in candidates:
-
-        candidate_summary.append({
-            "type": candidate["type"],
-            "score": candidate.get(
-                "score",
-                0.0
-            ),
-            "structural_score": candidate.get(
-                "structural_score",
-                0.0
-            ),
-            "length_compatible": candidate.get(
-                "length_compatible",
-                False
-            ),
-            "input_bits": candidate.get(
-                "input_bits"
-            ),
-            "output_bits": candidate.get(
-                "output_bits"
-            ),
-            "parameters": candidate.get(
-                "parameters",
-                {}
-            )
-        })
-
-
-    return {
-        "available": True,
-        "detected": detected,
-        "type": detected_type,
-        "confidence": round(
-            float(confidence),
-            4
-        ),
-        "score": round(
-            best_score,
-            4
-        ),
-        "margin": round(
-            float(margin),
-            4
-        ),
-        "reason": reason,
-        "candidates": candidate_summary,
-        "selected_bitstream": selected_bitstream,
-        "parameters": parameters
-    }
 # ============================================================
 # ANALYSIS
 # ============================================================
@@ -1083,8 +274,6 @@ async def analyze(
     sample_rate: float = Form(1_000_000),
     dtype: str = Form("float32"),
     iq_format: str = Form("IQ"),
-    reference_bits: str = Form(""),
-
 
     deinterleave_mode: str = Form("none"),
 
@@ -1158,14 +347,7 @@ async def analyze(
         modulation = cls.get(
             "detected"
         )
-        result["modulation"] = modulation
-        result["modulation_confidence"] = cls.get(
-            "confidence"
-        )
-        result["modulation_candidates"] = cls.get(
-            "candidates",
-            []
-        )
+
         demod_result = {
             "available": False,
             "reason": "No modulation classification available."
@@ -1188,6 +370,11 @@ async def analyze(
             "reason": "Deinterleaving not requested."
         }
 
+        bitstream_analysis = {
+            "available": False,
+            "reason": "No recovered bitstream available."
+        }
+
 
         if modulation:
 
@@ -1203,8 +390,7 @@ async def analyze(
                     sig,
                     modulation,
                     fs,
-                    symbol_rate,
-                    reference_bits
+                    symbol_rate
                 )
 
                 demod_result["available"] = True
@@ -1217,57 +403,11 @@ async def analyze(
                     "bitstream",
                     ""
                 )
-                # ------------------------------------------------
-                # BER
-                # ------------------------------------------------
-
-                ber_result = {
-                    "available": False,
-                    "reason": "Reference bitstream required for BER calculation."
-                }
-
-                if bitstream and reference_bits.strip():
-
-                    reference = "".join(
-                        b for b in reference_bits
-                        if b in ("0", "1")
-                    )
-
-                    recovered = "".join(
-                        b for b in str(bitstream)
-                        if b in ("0", "1")
-                    )
-
-                    compared_bits = min(
-                        len(reference),
-                        len(recovered)
-                    )
-
-                    if compared_bits > 0:
-
-                        errors = sum(
-                            reference[i] != recovered[i]
-                            for i in range(compared_bits)
-                        )
-
-                        ber_result = {
-                            "available": True,
-                            "bit_errors": errors,
-                            "bits_compared": compared_bits,
-                            "reference_bits": len(reference),
-                            "recovered_bits": len(recovered),
-                            "ber": errors / compared_bits
-                        }
-
-                bitstream_analysis = {
-                    "available": False,
-                    "reason": "No recovered bitstream available."
-                }
 
                 if bitstream:
 
                     # --------------------------------------------
-                    # BITSTREAM STRUCTURE ANALYSIS
+                    # BITSTREAM CORRELATION
                     # --------------------------------------------
 
                     bitstream_analysis = analyze_bitstream(
@@ -1289,127 +429,44 @@ async def analyze(
 
 
                     # --------------------------------------------
-                    # AUTOMATIC INTERLEAVING DETECTION
+                    # INTERLEAVING ANALYSIS
                     # --------------------------------------------
 
-                    # --------------------------------------------
-                    # INTERLEAVING DETECTION
-                    # --------------------------------------------
+                    interleaving_result = analyze_interleaving(
+                        bitstream
+                    )
 
-                    if reference_bits.strip():
-
-                        try:
-
-                            interleaving_result = (
-                                detect_interleaver_from_reference(
-                                    reference_bits=reference_bits,
-                                    observed_bits=bitstream,
-                                    rows=deinterleave_rows,
-                                    branches=deinterleave_branches,
-                                    delay=deinterleave_delay,
-                                    seed=deinterleave_seed
-                                )
-                            )
-
-                            interleaving_result["method"] = (
-                                "REFERENCE_CORRELATION"
-                            )
-
-                        except Exception as reference_error:
-
-                            interleaving_result = {
-                                "available": True,
-                                "detected": False,
-                                "type": "NOT_CONFIDENTLY_IDENTIFIED",
-                                "confidence": 0.0,
-                                "method": "REFERENCE_CORRELATION",
-                                "reason": str(reference_error)
-                            }
-
-                    else:
-
-                        interleaving_result = detect_interleaving_type(
-                            bitstream=bitstream,
-                            rows=deinterleave_rows,
-                            branches=deinterleave_branches,
-                            delay=deinterleave_delay,
-                            seed=deinterleave_seed
-                        )
-
-                        interleaving_result["method"] = (
-                            "STRUCTURE_ANALYSIS"
-                        )
+                    interleaving_result["available"] = True
 
 
                     # --------------------------------------------
-                    # AUTOMATIC DEINTERLEAVING
+                    # DEINTERLEAVING
                     # --------------------------------------------
 
-                    if interleaving_result.get("detected"):
+                    try:
 
-                        detected_mode = (
-                            interleaving_result["type"]
-                            .strip()
-                            .lower()
-                        )
-
-                        detected_parameters = (
-                            interleaving_result.get(
-                                "parameters",
-                                {}
+                        deinterleaving_result = (
+                            apply_deinterleaver(
+                                bitstream=bitstream,
+                                mode=deinterleave_mode,
+                                rows=deinterleave_rows,
+                                branches=deinterleave_branches,
+                                delay=deinterleave_delay,
+                                seed=deinterleave_seed
                             )
                         )
 
-                        try:
-
-                            deinterleaving_result = (
-                                apply_deinterleaver(
-                                    bitstream=bitstream,
-                                    mode=detected_mode,
-                                    rows=detected_parameters.get(
-                                        "rows",
-                                        deinterleave_rows
-                                    ),
-                                    branches=detected_parameters.get(
-                                        "branches",
-                                        deinterleave_branches
-                                    ),
-                                    delay=detected_parameters.get(
-                                        "delay",
-                                        deinterleave_delay
-                                    ),
-                                    seed=detected_parameters.get(
-                                        "seed",
-                                        deinterleave_seed
-                                    )
-                                )
-                            )
-
-                            deinterleaving_result["automatic"] = True
-
-                        except Exception as deinterleave_error:
-
-                            deinterleaving_result = {
-                                "available": True,
-                                "success": False,
-                                "automatic": True,
-                                "type": detected_mode.upper(),
-                                "reason": str(
-                                    deinterleave_error
-                                )
-                            }
-
-                    else:
+                    except Exception as deinterleave_error:
 
                         deinterleaving_result = {
                             "available": True,
                             "success": False,
-                            "automatic": True,
-                            "type": "NONE",
-                            "reason": (
-                                "Interleaving type was not "
-                                "confidently identified; "
-                                "de-interleaving was not applied."
+                            "type": str(
+                                deinterleave_mode
+                                or "none"
+                            ).upper(),
+                            "reason": str(
+                                deinterleave_error
                             )
                         }
 
@@ -1449,8 +506,6 @@ async def analyze(
             "demodulation": demod_result,
 
             "bitstream_analysis": bitstream_analysis,
-
-            "ber": ber_result,
 
             "fec": fec_result,
 

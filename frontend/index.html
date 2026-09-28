@@ -673,6 +673,19 @@ td:last-child{
   font-size:17px
 }
 
+.bitstream-quality-status{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-top:10px;
+  font-size:11px;
+  color:#9eb4c0
+}
+
+.bitstream-quality-status .status-pill{
+  min-width:82px;
+}
+
 .bitstream-wrap{
   position:relative
 }
@@ -1145,20 +1158,6 @@ td:last-child{
 
         </select>
 
-        <div class="control-group">
-
-          <label for="referenceBits">
-            Reference Bitstream
-          </label>
-
-          <input
-            id="referenceBits"
-            type="text"
-            placeholder="Enter reference bits (e.g. 01010101...)"
-          />
-
-        </div>
-
       </div>
 
 
@@ -1574,31 +1573,6 @@ td:last-child{
 
         </div>
 
-        <div class="digital-metric">
-
-          <label>
-            Frequency offset
-          </label>
-
-          <b id="frequencyOffset">
-            —
-          </b>
-
-        </div>
-
-
-        <div class="digital-metric">
-
-          <label>
-            Synchronization
-          </label>
-
-          <b id="syncStatus">
-            —
-          </b>
-
-        </div>
-
 
         <div class="digital-metric">
 
@@ -1744,45 +1718,6 @@ td:last-child{
         </div>
 
 
-        <div class="digital-metric">
-
-          <label>
-            Identified FEC family
-          </label>
-
-          <b id="fecFamily">
-            —
-          </b>
-
-        </div>
-
-
-        <div class="digital-metric">
-
-          <label>
-            Decoder
-          </label>
-
-          <b id="fecDecoder">
-            —
-          </b>
-
-        </div>
-
-
-        <div class="digital-metric">
-
-          <label>
-            Corrections
-          </label>
-
-          <b id="fecCorrections">
-            —
-          </b>
-
-        </div>
-
-
       </div>
 
 
@@ -1799,40 +1734,6 @@ td:last-child{
           <span class="empty">
             —
           </span>
-        </div>
-
-      </div>
-
-
-      <div class="evidence">
-
-        <label>
-          FEC family candidates
-        </label>
-
-        <div
-          id="fecFamilies"
-          class="code-rates"
-        >
-          <span class="empty">
-            —
-          </span>
-        </div>
-
-      </div>
-
-
-      <div class="evidence">
-
-        <label>
-          Decoder details
-        </label>
-
-        <div
-          id="fecDecoderDetails"
-          class="reason-list"
-        >
-          No decoder information available.
         </div>
 
       </div>
@@ -1908,11 +1809,28 @@ td:last-child{
 
       </div>
 
+
+      <div class="digital-metrics">
+
+        <div class="digital-metric">
+
+          <label>
+            Bitstream Correlation
+          </label>
+
+          <b id="bitstreamCorrelation">
+            —
+          </b>
+
+        </div>
+
+      </div>
+
     </div>
 
 
     <!-- =====================================================
-        BER ANALYSIS
+         BITSTREAM QUALITY
     ====================================================== -->
 
     <div class="card digital-card full">
@@ -1920,10 +1838,10 @@ td:last-child{
       <div class="digital-title">
 
         <h3>
-          BER Analysis
+          Bitstream Quality Analysis
         </h3>
 
-        <span id="berStatus">
+        <span id="bitstreamQualityStatus">
           Waiting for analysis
         </span>
 
@@ -1933,72 +1851,146 @@ td:last-child{
       <div class="digital-metrics">
 
         <div class="digital-metric">
-
-          <label>
-            BER
-          </label>
-
-          <b id="berValue">
-            —
-          </b>
-
+          <label>Quality status</label>
+          <b id="bitstreamQuality">—</b>
         </div>
 
-
         <div class="digital-metric">
-
-          <label>
-            Bit Errors
-          </label>
-
-          <b id="berErrors">
-            —
-          </b>
-
+          <label>Bits analyzed</label>
+          <b id="bitstreamQualityBits">—</b>
         </div>
 
-
         <div class="digital-metric">
-
-          <label>
-            Bits Compared
-          </label>
-
-          <b id="berCompared">
-            —
-          </b>
-
+          <label>0 balance</label>
+          <b id="bitstreamZeroPct">—</b>
         </div>
 
-
         <div class="digital-metric">
-
-          <label>
-            Reference Bits
-          </label>
-
-          <b id="berReference">
-            —
-          </b>
-
+          <label>1 balance</label>
+          <b id="bitstreamOnePct">—</b>
         </div>
 
+        <div class="digital-metric">
+          <label>Transition rate</label>
+          <b id="bitstreamTransitionRate">—</b>
+        </div>
 
         <div class="digital-metric">
+          <label>Longest 0 run</label>
+          <b id="bitstreamLongestZero">—</b>
+        </div>
 
-          <label>
-            Recovered Bits
-          </label>
-
-          <b id="berRecovered">
-            —
-          </b>
-
+        <div class="digital-metric">
+          <label>Longest 1 run</label>
+          <b id="bitstreamLongestOne">—</b>
         </div>
 
       </div>
 
+
+      <div class="disclaimer">
+
+        <strong>Interpretation:</strong>
+        Heuristic status based only on recovered-bit length,
+        binary balance and transition statistics.
+
+      </div>
+
+
     </div>
+
+
+
+
+    <!-- =====================================================
+         BITSTREAM CORRELATION GRAPH
+    ====================================================== -->
+
+    <div class="card digital-card full">
+
+      <div class="digital-title">
+
+        <h3>
+          Bitstream Correlation vs Lag
+        </h3>
+
+        <span id="bitstreamCorrelationStatus">
+          Waiting for analysis
+        </span>
+
+      </div>
+
+      <div
+        id="bitstreamCorrelationPlot"
+        class="bitstream-correlation-plot"
+      ></div>
+
+      <div class="digital-metrics">
+
+        <div class="digital-metric">
+          <label>Strongest lag</label>
+          <b id="bitstreamCorrelationLag">—</b>
+        </div>
+
+        <div class="digital-metric">
+          <label>Peak correlation</label>
+          <b id="bitstreamCorrelationPeak">—</b>
+        </div>
+
+      </div>
+
+      <div class="disclaimer">
+        <strong>Interpretation:</strong>
+        The curve shows normalized correlation of the recovered
+        binary sequence against delayed copies of itself.
+      </div>
+
+    </div>
+
+    <!-- =====================================================
+         FRAME / PACKET STRUCTURE
+    ====================================================== -->
+
+    <div class="card digital-card full">
+
+      <div class="digital-title">
+        <h3>Frame / Packet Structure</h3>
+        <span id="frameStructureStatus">Waiting for analysis</span>
+      </div>
+
+      <div class="digital-metrics">
+        <div class="digital-metric">
+          <label>Estimated frame length</label>
+          <b id="frameLength">—</b>
+        </div>
+        <div class="digital-metric">
+          <label>Frames detected</label>
+          <b id="frameCount">—</b>
+        </div>
+        <div class="digital-metric">
+          <label>Frame consistency</label>
+          <b id="frameConsistency">—</b>
+        </div>
+        <div class="digital-metric">
+          <label>Repeated pattern</label>
+          <b id="framePattern">—</b>
+        </div>
+      </div>
+
+      <div class="evidence">
+        <label>Candidate sync / preamble</label>
+        <div id="frameSyncWord" class="bitstream" style="min-height:72px;max-height:120px;">
+          No frame structure detected.
+        </div>
+      </div>
+
+      <div class="disclaimer">
+        <strong>Interpretation:</strong>
+        Heuristic frame detection based on repeated spacing and bit agreement. It does not identify a protocol by itself.
+      </div>
+
+    </div>
+
 
     <!-- =====================================================
          INTERLEAVING
@@ -2179,7 +2171,32 @@ td:last-child{
           Deinterleaving method
         </label>
 
-        
+        <select
+          id="deinterleave"
+          style="width:100%;"
+        >
+
+          <option value="none">
+            None
+          </option>
+
+          <option value="block">
+            Block
+          </option>
+
+          <option value="convolutional">
+            Convolutional
+          </option>
+
+          <option value="diagonal">
+            Diagonal
+          </option>
+
+          <option value="pseudo-random">
+            Pseudo-Random
+          </option>
+
+        </select>
 
       </div>
 
@@ -2411,8 +2428,6 @@ function resetDigital(){
   set('demodMod','—');
   set('symbolRate','—');
   set('sps','—');
-  set('frequencyOffset','—');
-  set('syncStatus','—');
   set('symbolsRecovered','—');
   set('bitsRecovered','—');
   set('bitBalance','—');
@@ -2426,21 +2441,9 @@ function resetDigital(){
   set('copyAgreement','—');
   set('hammingEvidence','—');
 
-  set('fecFamily','—');
-  set('fecDecoder','—');
-  set('fecCorrections','—');
-
-  $('fecFamilies').innerHTML =
-    '<span class="empty">—</span>';
-
   set(
-    'fecDecoderDetails',
-    'No decoder information available.'
-  );
-
-  set(
-  'codeRates',
-  '—'
+    'codeRates',
+    '<span class="empty">—</span>'
   );
 
   $('fecReasons').innerHTML =
@@ -2456,14 +2459,82 @@ function resetDigital(){
     '0 bits'
   );
 
-  $('copyBits').disabled = true;
+  set(
+    'bitstreamCorrelation',
+    '—'
+  );
 
-  set('berStatus','Waiting for analysis');
-  set('berValue','—');
-  set('berErrors','—');
-  set('berCompared','—');
-  set('berReference','—');
-  set('berRecovered','—');
+  set(
+    'bitstreamCorrelationStatus',
+    'Waiting for analysis'
+  );
+
+  set(
+    'bitstreamCorrelationLag',
+    '—'
+  );
+
+  set(
+    'bitstreamCorrelationPeak',
+    '—'
+  );
+
+  if(window.Plotly){
+    Plotly.purge('bitstreamCorrelationPlot');
+  }
+
+  set(
+    'bitstreamQualityStatus',
+    'Waiting for analysis'
+  );
+
+  set(
+    'bitstreamQuality',
+    '—'
+  );
+
+  set(
+    'bitstreamQualityBits',
+    '—'
+  );
+
+  set(
+    'bitstreamZeroPct',
+    '—'
+  );
+
+  set(
+    'bitstreamOnePct',
+    '—'
+  );
+
+  set(
+    'bitstreamTransitionRate',
+    '—'
+  );
+
+  set(
+    'bitstreamLongestZero',
+    '—'
+  );
+
+  set(
+    'bitstreamLongestOne',
+    '—'
+  );
+
+  set(
+    'frameStructureStatus',
+    'Waiting for analysis'
+  );
+
+  set('frameLength','—');
+  set('frameCount','—');
+  set('frameConsistency','—');
+  set('framePattern','—');
+  set('frameSyncWord','No frame structure detected.');
+
+  $('copyBits').disabled = true;
 
   set(
     'interleavingStatus',
@@ -2504,6 +2575,391 @@ function resetDigital(){
     'deinterleavedBitstream',
     'No deinterleaving requested.'
   );
+
+}
+
+
+function longestBitRun(bits, value){
+
+  let longest = 0;
+  let current = 0;
+
+  for(const bit of bits){
+
+    if(bit === value){
+      current += 1;
+      if(current > longest)
+        longest = current;
+    }else{
+      current = 0;
+    }
+
+  }
+
+  return longest;
+
+}
+
+
+function analyzeFrameStructure(bits){
+
+  const clean = bits.filter(b => b === '0' || b === '1');
+
+  if(clean.length < 64){
+    return {detected:false, reason:'Need at least 64 recovered bits'};
+  }
+
+  const maxCandidate = Math.min(256, Math.floor(clean.length / 3));
+  let best = null;
+
+  for(let length = 8; length <= maxCandidate; length += 1){
+    let matches = 0;
+    let compared = 0;
+
+    for(let i = 0; i + length < clean.length; i += 1){
+      if(clean[i] === clean[i + length]) matches += 1;
+      compared += 1;
+    }
+
+    if(compared === 0) continue;
+
+    const consistency = matches / compared;
+    const score = consistency + Math.min(length,64) / 64000;
+
+    if(!best || score > best.score){
+      best = {length, consistency, score};
+    }
+  }
+
+  if(!best || best.consistency < 0.62){
+    return {detected:false, reason:'No strong repeated frame spacing detected.'};
+  }
+
+  const frameLength = best.length;
+  const frames = Math.floor(clean.length / frameLength);
+
+  if(frames < 3){
+    return {detected:false, reason:'Not enough repeated blocks for a frame estimate.'};
+  }
+
+  let consensus = '';
+
+  for(let i = 0; i < frameLength; i += 1){
+    let zeros = 0;
+    let ones = 0;
+
+    for(let f = 0; f < frames; f += 1){
+      const bit = clean[f * frameLength + i];
+      if(bit === '1') ones += 1;
+      else zeros += 1;
+    }
+
+    consensus += ones >= zeros ? '1' : '0';
+  }
+
+  const prefix = clean.slice(0, Math.min(16, frameLength)).join('');
+  let prefixMatches = 0;
+
+  for(let f = 1; f < frames; f += 1){
+    const candidate = clean
+      .slice(f * frameLength, f * frameLength + prefix.length)
+      .join('');
+    if(candidate === prefix) prefixMatches += 1;
+  }
+
+  const syncWord = prefixMatches >= 2
+    ? prefix
+    : consensus.slice(0, Math.min(16, consensus.length));
+
+  const status =
+    best.consistency >= 0.85 ? 'STRONG' :
+    best.consistency >= 0.72 ? 'MODERATE' :
+    'WEAK';
+
+  return {
+    detected:true,
+    status,
+    frameLength,
+    frames,
+    consistency:best.consistency,
+    pattern:consensus.length > 32 ? consensus.slice(0,32) + '…' : consensus,
+    syncWord,
+    prefixMatches
+  };
+}
+
+
+function renderFrameStructure(bits){
+
+  const result = analyzeFrameStructure(bits);
+
+  if(!result.detected){
+    set('frameStructureStatus', result.reason || 'No frame structure detected.');
+    set('frameLength','—');
+    set('frameCount','—');
+    set('frameConsistency','—');
+    set('framePattern','—');
+    set('frameSyncWord', result.reason || 'No frame structure detected.');
+    return;
+  }
+
+  set(
+    'frameStructureStatus',
+    `${result.status} structure • ${result.prefixMatches} prefix repeats`
+  );
+
+  set('frameLength', `${result.frameLength.toLocaleString()} bits`);
+  set('frameCount', result.frames.toLocaleString());
+  set('frameConsistency', `${num(result.consistency * 100, 2)}%`);
+  set('framePattern', result.pattern);
+  set('frameSyncWord', result.syncWord || '—');
+}
+
+
+function renderBitstreamCorrelationPlot(bits){
+
+  if(!window.Plotly) return;
+
+  const clean =
+    bits.filter(
+      b => b === '0' || b === '1'
+    );
+
+  const el =
+    document.getElementById(
+      'bitstreamCorrelationPlot'
+    );
+
+  if(!el) return;
+
+  if(clean.length < 16){
+
+    Plotly.purge(el);
+
+    set(
+      'bitstreamCorrelationStatus',
+      'Need at least 16 recovered bits'
+    );
+
+    return;
+  }
+
+  const x =
+    clean.map(
+      b => b === '1' ? 1 : -1
+    );
+
+  const mean =
+    x.reduce((a,b) => a + b, 0) / x.length;
+
+  for(let i=0;i<x.length;i += 1){
+    x[i] -= mean;
+  }
+
+  const maxLag =
+    Math.min(128, Math.floor(x.length / 2));
+
+  const lags = [];
+  const correlations = [];
+
+  for(let lag=1; lag<=maxLag; lag += 1){
+
+    let sumAB = 0;
+    let sumAA = 0;
+    let sumBB = 0;
+
+    for(let i=0; i<x.length-lag; i += 1){
+      const a = x[i];
+      const b = x[i+lag];
+      sumAB += a*b;
+      sumAA += a*a;
+      sumBB += b*b;
+    }
+
+    const denom =
+      Math.sqrt(sumAA * sumBB);
+
+    const corr =
+      denom > 0 ? sumAB / denom : 0;
+
+    lags.push(lag);
+    correlations.push(corr);
+  }
+
+  let peakIndex = 0;
+
+  for(let i=1; i<correlations.length; i += 1){
+    if(
+      Math.abs(correlations[i]) >
+      Math.abs(correlations[peakIndex])
+    ){
+      peakIndex = i;
+    }
+  }
+
+  const peakLag = lags[peakIndex];
+  const peak = correlations[peakIndex];
+
+  set(
+    'bitstreamCorrelationStatus',
+    `Computed over ${maxLag.toLocaleString()} lags`
+  );
+
+  set(
+    'bitstreamCorrelationLag',
+    peakLag.toLocaleString()
+  );
+
+  set(
+    'bitstreamCorrelationPeak',
+    num(peak, 4)
+  );
+
+  const layout = {
+    margin:{l:52,r:18,t:16,b:44},
+    paper_bgcolor:'transparent',
+    plot_bgcolor:'transparent',
+    font:{color:'#b9cbd3',size:11},
+    xaxis:{
+      title:'Lag',
+      gridcolor:'#17313e',
+      zerolinecolor:'#294755'
+    },
+    yaxis:{
+      title:'Correlation',
+      range:[-1,1],
+      gridcolor:'#17313e',
+      zerolinecolor:'#294755'
+    },
+    showlegend:false
+  };
+
+  const traces = [
+    {
+      x:lags,
+      y:correlations,
+      type:'scatter',
+      mode:'lines',
+      line:{width:2}
+    },
+    {
+      x:[peakLag],
+      y:[peak],
+      type:'scatter',
+      mode:'markers',
+      marker:{size:9},
+      hovertemplate:
+        'Lag: %{x}<br>Correlation: %{y:.4f}<extra></extra>'
+    }
+  ];
+
+  Plotly.newPlot(
+    el,
+    traces,
+    layout,
+    {
+      responsive:true,
+      displaylogo:false,
+      modeBarButtonsToRemove:[
+        'lasso2d',
+        'select2d',
+        'autoScale2d'
+      ]
+    }
+  );
+
+}
+
+
+function bitstreamQualityPill(status){
+
+  const cls =
+    status === 'GOOD'
+      ? 'good'
+      : status === 'MODERATE'
+        ? 'warn'
+        : 'neutral';
+
+  return `
+    <span class="status-pill ${cls}">
+      ${status || '—'}
+    </span>
+  `;
+
+}
+
+
+function analyzeBitstreamQuality(bits){
+
+  const total = bits.length;
+
+  if(total < 32){
+    return {
+      status: 'WEAK',
+      total,
+      zeros: 0,
+      ones: 0,
+      zeroPct: 0,
+      onePct: 0,
+      transitionRate: 0,
+      longestZero: 0,
+      longestOne: 0
+    };
+  }
+
+  let zeros = 0;
+
+  for(const bit of bits){
+    if(bit === '0') zeros += 1;
+  }
+
+  const ones = total - zeros;
+  const zeroPct = 100 * zeros / total;
+  const onePct = 100 * ones / total;
+
+  let transitions = 0;
+
+  for(let i=1;i<total;i += 1){
+    if(bits[i] !== bits[i-1])
+      transitions += 1;
+  }
+
+  const transitionRate =
+    total > 1 ? transitions / (total - 1) : 0;
+
+  const balanceDistance =
+    Math.abs(zeroPct - 50);
+
+  let status = 'MODERATE';
+
+  if(
+    total >= 128 &&
+    balanceDistance <= 15 &&
+    transitionRate >= 0.08 &&
+    transitionRate <= 0.92
+  ){
+    status = 'GOOD';
+  }
+  else if(
+    total < 64 ||
+    balanceDistance > 30 ||
+    transitionRate < 0.02 ||
+    transitionRate > 0.98
+  ){
+    status = 'WEAK';
+  }
+
+  return {
+    status,
+    total,
+    zeros,
+    ones,
+    zeroPct,
+    onePct,
+    transitionRate,
+    longestZero: longestBitRun(bits,'0'),
+    longestOne: longestBitRun(bits,'1')
+  };
 
 }
 
@@ -2557,7 +3013,6 @@ function renderDigital(d){
 
   const demod =
     d.demodulation || {};
-  
 
   if(demod.available){
 
@@ -2591,24 +3046,6 @@ function renderDigital(d){
     );
 
     set(
-      'frequencyOffset',
-      Number.isFinite(
-        Number(demod.frequency_offset_hz)
-      )
-        ? Number(
-            demod.frequency_offset_hz
-          ).toLocaleString() + ' Hz'
-        : '—'
-    );
-
-    set(
-      'syncStatus',
-      demod.synchronization_applied
-        ? 'Applied'
-        : 'Not applied'
-    );
-
-    set(
       'symbolsRecovered',
       Number(
         demod.symbols_recovered || 0
@@ -2637,6 +3074,9 @@ function renderDigital(d){
         demod.bitstream || ''
       );
 
+    const bitstreamAnalysis =
+      d.bitstream_analysis || {};
+
     if(bits.length){
 
       set(
@@ -2647,6 +3087,63 @@ function renderDigital(d){
       set(
         'bitstreamInfo',
         `${bits.length.toLocaleString()} bits`
+      );
+
+      set(
+        'bitstreamCorrelation',
+        num(
+          bitstreamAnalysis.autocorrelation,
+          4
+        )
+      );
+
+      renderBitstreamCorrelationPlot(
+        bits.split('')
+      );
+
+      renderFrameStructure(
+        bits.split('')
+      );
+
+      const quality =
+        analyzeBitstreamQuality(bits.split(''));
+
+      set(
+        'bitstreamQualityStatus',
+        'Computed from recovered bits'
+      );
+
+      $('bitstreamQuality').innerHTML =
+        bitstreamQualityPill(quality.status);
+
+      set(
+        'bitstreamQualityBits',
+        quality.total.toLocaleString()
+      );
+
+      set(
+        'bitstreamZeroPct',
+        num(quality.zeroPct, 2) + '%'
+      );
+
+      set(
+        'bitstreamOnePct',
+        num(quality.onePct, 2) + '%'
+      );
+
+      set(
+        'bitstreamTransitionRate',
+        num(quality.transitionRate, 4)
+      );
+
+      set(
+        'bitstreamLongestZero',
+        quality.longestZero.toLocaleString()
+      );
+
+      set(
+        'bitstreamLongestOne',
+        quality.longestOne.toLocaleString()
       );
 
       $('copyBits').disabled = false;
@@ -2663,6 +3160,16 @@ function renderDigital(d){
         '0 bits'
       );
 
+      set(
+        'bitstreamCorrelationStatus',
+        'No recovered bitstream'
+      );
+
+      set(
+        'bitstreamQualityStatus',
+        'No recovered bitstream'
+      );
+
     }
 
   }else{
@@ -2673,66 +3180,6 @@ function renderDigital(d){
     );
 
   }
-
-    /* ----------------------------------------------------------
-      BER
-    ---------------------------------------------------------- */
-
-    const ber =
-      d.ber || {};
-
-    if(ber.available){
-
-      set(
-        'berStatus',
-        'BER calculated'
-      );
-
-      set(
-        'berValue',
-        Number.isFinite(
-          Number(ber.ber)
-        )
-          ? Number(ber.ber).toFixed(6)
-          : '—'
-      );
-
-      set(
-        'berErrors',
-        Number(
-          ber.bit_errors || 0
-        ).toLocaleString()
-      );
-
-      set(
-        'berCompared',
-        Number(
-          ber.bits_compared || 0
-        ).toLocaleString()
-      );
-
-      set(
-        'berReference',
-        Number(
-          ber.reference_bits || 0
-        ).toLocaleString()
-      );
-
-      set(
-        'berRecovered',
-        Number(
-          ber.recovered_bits || 0
-        ).toLocaleString()
-      );
-
-    }else{
-
-      set(
-        'berStatus',
-        ber.reason || 'Reference bitstream required'
-      );
-
-    }
 
 
   /* ----------------------------------------------------------
@@ -2804,121 +3251,6 @@ function renderDigital(d){
 
 
     /* --------------------------------------------------------
-       FEC FAMILY / DECODER
-    -------------------------------------------------------- */
-
-    set(
-      'fecFamily',
-      fec.identified_fec_family || 'UNKNOWN'
-    );
-
-
-    set(
-      'fecDecoder',
-      `${fec.decoder_family || 'NONE'} / ${fec.decoder_status || 'NOT_AVAILABLE'}`
-    );
-
-
-    set(
-      'fecCorrections',
-      Number.isFinite(
-        Number(fec.corrections)
-      )
-        ? Number(
-            fec.corrections
-          ).toLocaleString()
-        : '—'
-    );
-
-
-    const familyCandidates =
-      Array.isArray(
-        fec.fec_family_candidates
-      )
-        ? fec.fec_family_candidates
-        : [];
-
-
-    if(familyCandidates.length){
-
-      $('fecFamilies').innerHTML =
-        familyCandidates
-          .map(
-            x => {
-
-              const evidence =
-                Number(
-                  x.evidence
-                );
-
-              const validated =
-                x.validated
-                  ? 'VALIDATED'
-                  : 'CANDIDATE';
-
-              return `
-                <span class="rate-chip">
-                  ${x.family}: ${validated}
-                  (${Number.isFinite(evidence) ? evidence.toFixed(2) : '0.00'})
-                </span>
-              `;
-
-            }
-          )
-          .join('');
-
-    }else{
-
-      $('fecFamilies').innerHTML =
-        '<span class="empty">None identified</span>';
-
-    }
-
-
-    const decoderDetails =
-      fec.decoder_details &&
-      typeof fec.decoder_details === 'object'
-        ? fec.decoder_details
-        : {};
-
-
-    const decoderParts =
-      Object.entries(
-        decoderDetails
-      )
-        .map(
-          ([key, value]) => {
-
-            if(
-              value === null ||
-              value === undefined
-            ){
-
-              return null;
-
-            }
-
-            const shown =
-              Array.isArray(value)
-                ? value.join(', ')
-                : String(value);
-
-            return `${key}: ${shown}`;
-
-          }
-        )
-        .filter(Boolean);
-
-
-    set(
-      'fecDecoderDetails',
-      decoderParts.length
-        ? decoderParts.join(' • ')
-        : 'No decoder information available.'
-    );
-
-
-    /* --------------------------------------------------------
        CODE RATES
     -------------------------------------------------------- */
 
@@ -2929,27 +3261,10 @@ function renderDigital(d){
         ? fec.code_rate_candidates
         : [];
 
-    const decoderRate =
-      fec.decoder_details &&
-      fec.decoder_details.rate
-        ? String(
-            fec.decoder_details.rate
-          )
-        : '';
-
-    const displayRates =
-      rates.length
-        ? rates
-        : (
-            decoderRate
-              ? [decoderRate]
-              : []
-          );
-
-    if(displayRates.length){
+    if(rates.length){
 
       $('codeRates').innerHTML =
-        displayRates
+        rates
           .map(
             r =>
               `<span class="rate-chip">${r}</span>`
@@ -2959,7 +3274,7 @@ function renderDigital(d){
     }else{
 
       $('codeRates').innerHTML =
-        '<span class="empty">—</span>';
+        '<span class="empty">None identified</span>';
 
     }
 
@@ -3011,9 +3326,10 @@ function renderDigital(d){
   if(inter.available){
 
     const evidence =
-      inter.detected
-        ? (inter.type || 'UNKNOWN')
-        : 'NONE';
+      String(
+        inter.interleaving_evidence ||
+        'NONE'
+      );
 
 
     set(
@@ -3296,13 +3612,11 @@ $('go').onclick = async () => {
     $('iq').value
   );
 
+
   fd.append(
-    'reference_bits',
-    $('referenceBits').value.trim()
+    'deinterleave_mode',
+    $('deinterleave').value
   );
-
-
-
 
   fd.append(
     'deinterleave_rows',
