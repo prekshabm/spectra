@@ -1,5 +1,7 @@
 import numpy as np
 
+from backend.analysis.ldpc_candidate_search import auto_ldpc_search
+
 
 # ============================================================
 # SPECTRA — FEC / ERROR-CONTROL ANALYSIS
@@ -2848,14 +2850,7 @@ def analyze_fec(
         reed_solomon
     )
 
-    ldpc_result = {
-        "status":
-            "NOT_ATTEMPTED",
-        "corrected_bits":
-            None,
-        "corrections":
-            0,
-    }
+    ldpc_result = auto_ldpc_search(bits)
 
     if ldpc_matrix is not None:
 
