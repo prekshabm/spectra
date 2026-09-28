@@ -9,9 +9,11 @@ from backend.preprocessing.pipeline import preprocess
 from backend.dsp.analysis import analyze_signal
 from backend.ml.classifier import ModulationClassifier
 from backend.demod.demodulator import demodulate
+
 from backend.analysis.fec import analyze_fec
 from backend.analysis.interleaving import analyze_interleaving
 from backend.analysis.bitstream import analyze_bitstream
+from backend.analysis.frame_structure import analyze_frame_structure
 
 from backend.analysis.interleavers import (
     block_deinterleave,
@@ -124,7 +126,10 @@ def apply_deinterleaver(
             "available": True,
             "success": False,
             "type": mode.upper(),
-            "reason": "No binary bits available for deinterleaving."
+            "reason": (
+                "No binary bits available "
+                "for deinterleaving."
+            )
         }
 
 
@@ -137,8 +142,10 @@ def apply_deinterleaver(
         rows = int(rows)
 
         if rows < 1:
+
             raise ValueError(
-                "Block deinterleaver rows must be at least 1."
+                "Block deinterleaver rows "
+                "must be at least 1."
             )
 
         recovered = block_deinterleave(
@@ -170,13 +177,17 @@ def apply_deinterleaver(
         delay = int(delay)
 
         if branches < 1:
+
             raise ValueError(
-                "Convolutional deinterleaver branches must be at least 1."
+                "Convolutional deinterleaver "
+                "branches must be at least 1."
             )
 
         if delay < 0:
+
             raise ValueError(
-                "Convolutional deinterleaver delay cannot be negative."
+                "Convolutional deinterleaver "
+                "delay cannot be negative."
             )
 
         recovered = convolutional_deinterleave(
@@ -209,8 +220,10 @@ def apply_deinterleaver(
         rows = int(rows)
 
         if rows < 1:
+
             raise ValueError(
-                "Diagonal deinterleaver rows must be at least 1."
+                "Diagonal deinterleaver rows "
+                "must be at least 1."
             )
 
         recovered = diagonal_deinterleave(
@@ -350,29 +363,53 @@ async def analyze(
 
         demod_result = {
             "available": False,
-            "reason": "No modulation classification available."
+            "reason": (
+                "No modulation classification "
+                "available."
+            )
+        }
+
+        bitstream_analysis = {
+            "available": False,
+            "reason": (
+                "No recovered bitstream "
+                "available."
+            )
+        }
+
+        frame_structure_result = {
+            "available": False,
+            "detected": False,
+            "status": "NO_BITSTREAM",
+            "reason": (
+                "No recovered bitstream "
+                "available."
+            )
         }
 
         fec_result = {
             "available": False,
-            "reason": "No recovered bitstream available."
+            "reason": (
+                "No recovered bitstream "
+                "available."
+            )
         }
 
         interleaving_result = {
             "available": False,
-            "reason": "No recovered bitstream available."
+            "reason": (
+                "No recovered bitstream "
+                "available."
+            )
         }
 
         deinterleaving_result = {
             "available": False,
             "success": False,
             "type": "NONE",
-            "reason": "Deinterleaving not requested."
-        }
-
-        bitstream_analysis = {
-            "available": False,
-            "reason": "No recovered bitstream available."
+            "reason": (
+                "Deinterleaving not requested."
+            )
         }
 
 
@@ -383,7 +420,9 @@ async def analyze(
                 symbol_rate = (
                     result
                     .get("parameters", {})
-                    .get("symbol_rate_candidate_sym_s")
+                    .get(
+                        "symbol_rate_candidate_sym_s"
+                    )
                 )
 
                 demod_result = demodulate(
@@ -410,11 +449,52 @@ async def analyze(
                     # BITSTREAM CORRELATION
                     # --------------------------------------------
 
-                    bitstream_analysis = analyze_bitstream(
-                        bitstream
-                    )
+                    try:
 
-                    bitstream_analysis["available"] = True
+                        bitstream_analysis = (
+                            analyze_bitstream(
+                                bitstream
+                            )
+                        )
+
+                        bitstream_analysis[
+                            "available"
+                        ] = True
+
+                    except Exception as bitstream_error:
+
+                        bitstream_analysis = {
+                            "available": False,
+                            "reason": str(
+                                bitstream_error
+                            )
+                        }
+
+
+                    # --------------------------------------------
+                    # FRAME / HEADER / PAYLOAD / CRC
+                    # --------------------------------------------
+
+                    try:
+
+                        frame_structure_result = (
+                            analyze_frame_structure(
+                                bitstream
+                            )
+                        )
+
+                    except Exception as frame_error:
+
+                        frame_structure_result = {
+                            "available": True,
+                            "detected": False,
+                            "status": (
+                                "ANALYSIS_ERROR"
+                            ),
+                            "reason": str(
+                                frame_error
+                            )
+                        }
 
 
                     # --------------------------------------------
@@ -432,11 +512,15 @@ async def analyze(
                     # INTERLEAVING ANALYSIS
                     # --------------------------------------------
 
-                    interleaving_result = analyze_interleaving(
-                        bitstream
+                    interleaving_result = (
+                        analyze_interleaving(
+                            bitstream
+                        )
                     )
 
-                    interleaving_result["available"] = True
+                    interleaving_result[
+                        "available"
+                    ] = True
 
 
                     # --------------------------------------------
@@ -470,28 +554,55 @@ async def analyze(
                             )
                         }
 
+
             except Exception as demod_error:
 
                 demod_result = {
                     "available": False,
-                    "reason": str(demod_error)
+                    "reason": str(
+                        demod_error
+                    )
+                }
+
+                bitstream_analysis = {
+                    "available": False,
+                    "reason": (
+                        "Demodulation failed."
+                    )
+                }
+
+                frame_structure_result = {
+                    "available": False,
+                    "detected": False,
+                    "status": (
+                        "DEMODULATION_FAILED"
+                    ),
+                    "reason": (
+                        "Demodulation failed."
+                    )
                 }
 
                 fec_result = {
                     "available": False,
-                    "reason": "Demodulation failed."
+                    "reason": (
+                        "Demodulation failed."
+                    )
                 }
 
                 interleaving_result = {
                     "available": False,
-                    "reason": "Demodulation failed."
+                    "reason": (
+                        "Demodulation failed."
+                    )
                 }
 
                 deinterleaving_result = {
                     "available": False,
                     "success": False,
                     "type": "NONE",
-                    "reason": "Demodulation failed."
+                    "reason": (
+                        "Demodulation failed."
+                    )
                 }
 
 
@@ -505,13 +616,19 @@ async def analyze(
 
             "demodulation": demod_result,
 
-            "bitstream_analysis": bitstream_analysis,
+            "bitstream_analysis":
+                bitstream_analysis,
+
+            "frame_structure":
+                frame_structure_result,
 
             "fec": fec_result,
 
-            "interleaving": interleaving_result,
+            "interleaving":
+                interleaving_result,
 
-            "deinterleaving": deinterleaving_result,
+            "deinterleaving":
+                deinterleaving_result,
 
             "preprocessing": prep,
 

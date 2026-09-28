@@ -258,6 +258,19 @@ def _autocorrelation(bits, max_lag=128):
             ),
             4
         ),
+        "lags": list(
+            range(
+                1,
+                len(correlations) + 1
+            )
+        ),
+        "correlations": [
+            round(
+                float(value),
+                4
+            )
+            for value in correlations
+        ],
     }
 
 
@@ -270,7 +283,6 @@ def _block_statistics(bits):
     """
 
     if len(bits) < 32:
-
         return {
             "block_size": 0,
             "blocks": 0,
