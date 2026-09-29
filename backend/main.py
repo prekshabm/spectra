@@ -9,11 +9,13 @@ from backend.preprocessing.pipeline import preprocess
 from backend.dsp.analysis import analyze_signal
 from backend.ml.classifier import ModulationClassifier
 from backend.demod.demodulator import demodulate
-
 from backend.analysis.fec import analyze_fec
-from backend.analysis.interleaving import analyze_interleaving
-from backend.analysis.bitstream import analyze_bitstream
+from backend.analysis.interleaving import (
+    analyze_interleaving,
+    auto_detect_and_deinterleave
+)
 from backend.analysis.frame_structure import analyze_frame_structure
+from backend.analysis.bitstream import analyze_bitstream
 
 from backend.analysis.interleavers import (
     block_deinterleave,
@@ -126,10 +128,7 @@ def apply_deinterleaver(
             "available": True,
             "success": False,
             "type": mode.upper(),
-            "reason": (
-                "No binary bits available "
-                "for deinterleaving."
-            )
+            "reason": "No binary bits available for deinterleaving."
         }
 
 
@@ -142,10 +141,8 @@ def apply_deinterleaver(
         rows = int(rows)
 
         if rows < 1:
-
             raise ValueError(
-                "Block deinterleaver rows "
-                "must be at least 1."
+                "Block deinterleaver rows must be at least 1."
             )
 
         recovered = block_deinterleave(
@@ -177,17 +174,13 @@ def apply_deinterleaver(
         delay = int(delay)
 
         if branches < 1:
-
             raise ValueError(
-                "Convolutional deinterleaver "
-                "branches must be at least 1."
+                "Convolutional deinterleaver branches must be at least 1."
             )
 
         if delay < 0:
-
             raise ValueError(
-                "Convolutional deinterleaver "
-                "delay cannot be negative."
+                "Convolutional deinterleaver delay cannot be negative."
             )
 
         recovered = convolutional_deinterleave(
@@ -220,10 +213,8 @@ def apply_deinterleaver(
         rows = int(rows)
 
         if rows < 1:
-
             raise ValueError(
-                "Diagonal deinterleaver rows "
-                "must be at least 1."
+                "Diagonal deinterleaver rows must be at least 1."
             )
 
         recovered = diagonal_deinterleave(
@@ -286,17 +277,7 @@ async def analyze(
     file: UploadFile = File(...),
     sample_rate: float = Form(1_000_000),
     dtype: str = Form("float32"),
-    iq_format: str = Form("IQ"),
-
-    deinterleave_mode: str = Form("none"),
-
-    deinterleave_rows: int = Form(8),
-
-    deinterleave_branches: int = Form(4),
-
-    deinterleave_delay: int = Form(3),
-
-    deinterleave_seed: int = Form(42)
+    iq_format: str = Form("IQ")
 ):
 
     raw = await file.read()
@@ -363,53 +344,34 @@ async def analyze(
 
         demod_result = {
             "available": False,
-            "reason": (
-                "No modulation classification "
-                "available."
-            )
-        }
-
-        bitstream_analysis = {
-            "available": False,
-            "reason": (
-                "No recovered bitstream "
-                "available."
-            )
-        }
-
-        frame_structure_result = {
-            "available": False,
-            "detected": False,
-            "status": "NO_BITSTREAM",
-            "reason": (
-                "No recovered bitstream "
-                "available."
-            )
+            "reason": "No modulation classification available."
         }
 
         fec_result = {
             "available": False,
-            "reason": (
-                "No recovered bitstream "
-                "available."
-            )
+            "reason": "No recovered bitstream available."
         }
 
         interleaving_result = {
             "available": False,
-            "reason": (
-                "No recovered bitstream "
-                "available."
-            )
+            "reason": "No recovered bitstream available."
         }
 
         deinterleaving_result = {
             "available": False,
             "success": False,
             "type": "NONE",
-            "reason": (
-                "Deinterleaving not requested."
-            )
+            "reason": "Deinterleaving not requested."
+        }
+
+        bitstream_analysis = {
+            "available": False,
+            "reason": "No recovered bitstream available."
+        }
+
+        frame_structure_result = {
+            "available": False,
+            "reason": "No recovered bitstream available."
         }
 
 
@@ -420,9 +382,7 @@ async def analyze(
                 symbol_rate = (
                     result
                     .get("parameters", {})
-                    .get(
-                        "symbol_rate_candidate_sym_s"
-                    )
+                    .get("symbol_rate_candidate_sym_s")
                 )
 
                 demod_result = demodulate(
@@ -449,52 +409,11 @@ async def analyze(
                     # BITSTREAM CORRELATION
                     # --------------------------------------------
 
-                    try:
+                    bitstream_analysis = analyze_bitstream(
+                        bitstream
+                    )
 
-                        bitstream_analysis = (
-                            analyze_bitstream(
-                                bitstream
-                            )
-                        )
-
-                        bitstream_analysis[
-                            "available"
-                        ] = True
-
-                    except Exception as bitstream_error:
-
-                        bitstream_analysis = {
-                            "available": False,
-                            "reason": str(
-                                bitstream_error
-                            )
-                        }
-
-
-                    # --------------------------------------------
-                    # FRAME / HEADER / PAYLOAD / CRC
-                    # --------------------------------------------
-
-                    try:
-
-                        frame_structure_result = (
-                            analyze_frame_structure(
-                                bitstream
-                            )
-                        )
-
-                    except Exception as frame_error:
-
-                        frame_structure_result = {
-                            "available": True,
-                            "detected": False,
-                            "status": (
-                                "ANALYSIS_ERROR"
-                            ),
-                            "reason": str(
-                                frame_error
-                            )
-                        }
+                    bitstream_analysis["available"] = True
 
 
                     # --------------------------------------------
@@ -509,100 +428,116 @@ async def analyze(
 
 
                     # --------------------------------------------
-                    # INTERLEAVING ANALYSIS
-                    # --------------------------------------------
-
-                    interleaving_result = (
-                        analyze_interleaving(
-                            bitstream
-                        )
-                    )
-
-                    interleaving_result[
-                        "available"
-                    ] = True
-
-
-                    # --------------------------------------------
-                    # DEINTERLEAVING
+                    # FRAME / PACKET STRUCTURE
                     # --------------------------------------------
 
                     try:
 
-                        deinterleaving_result = (
-                            apply_deinterleaver(
-                                bitstream=bitstream,
-                                mode=deinterleave_mode,
-                                rows=deinterleave_rows,
-                                branches=deinterleave_branches,
-                                delay=deinterleave_delay,
-                                seed=deinterleave_seed
-                            )
+                        frame_structure_result = analyze_frame_structure(
+                            bitstream
                         )
 
-                    except Exception as deinterleave_error:
+                    except Exception as frame_error:
 
-                        deinterleaving_result = {
-                            "available": True,
-                            "success": False,
-                            "type": str(
-                                deinterleave_mode
-                                or "none"
-                            ).upper(),
-                            "reason": str(
-                                deinterleave_error
+                        frame_structure_result = {
+                            "available": False,
+                            "status": "ERROR",
+                            "reason": str(frame_error)
+                        }
+
+
+                    # --------------------------------------------
+                    # INTERLEAVING ANALYSIS
+                    # --------------------------------------------
+
+                    interleaving_result = analyze_interleaving(
+                        bitstream
+                    )
+
+                    interleaving_result["available"] = True
+
+
+                    # --------------------------------------------
+                    # AUTOMATIC FOUR-WAY DETECTION + DEINTERLEAVING
+                    # --------------------------------------------
+
+                    try:
+
+                        automatic_interleaving = auto_detect_and_deinterleave(
+                            bitstream
+                        )
+
+                        interleaving_result["automatic_detection"] = {
+                            "detected": automatic_interleaving.get(
+                                "detected", False
+                            ),
+                            "type": automatic_interleaving.get(
+                                "type", "UNKNOWN"
+                            ),
+                            "confidence": automatic_interleaving.get(
+                                "confidence", 0.0
+                            ),
+                            "status": automatic_interleaving.get(
+                                "status", "AMBIGUOUS"
+                            ),
+                            "best_candidate": automatic_interleaving.get(
+                                "best_candidate"
+                            ),
+                            "candidates": automatic_interleaving.get(
+                                "candidates", {}
                             )
                         }
 
+                        deinterleaving_result = automatic_interleaving.get(
+                            "deinterleaving",
+                            {
+                                "available": False,
+                                "success": False,
+                                "type": "NONE",
+                                "reason": "Automatic deinterleaving unavailable."
+                            }
+                        )
+
+                    except Exception as auto_deinterleave_error:
+
+                        interleaving_result["automatic_detection"] = {
+                            "detected": False,
+                            "type": "UNKNOWN",
+                            "confidence": 0.0,
+                            "status": "ERROR",
+                            "best_candidate": None,
+                            "candidates": {}
+                        }
+
+                        deinterleaving_result = {
+                            "available": False,
+                            "success": False,
+                            "type": "NONE",
+                            "reason": str(auto_deinterleave_error)
+                        }
 
             except Exception as demod_error:
 
                 demod_result = {
                     "available": False,
-                    "reason": str(
-                        demod_error
-                    )
-                }
-
-                bitstream_analysis = {
-                    "available": False,
-                    "reason": (
-                        "Demodulation failed."
-                    )
-                }
-
-                frame_structure_result = {
-                    "available": False,
-                    "detected": False,
-                    "status": (
-                        "DEMODULATION_FAILED"
-                    ),
-                    "reason": (
-                        "Demodulation failed."
-                    )
+                    "reason": str(demod_error)
                 }
 
                 fec_result = {
                     "available": False,
-                    "reason": (
-                        "Demodulation failed."
-                    )
+                    "reason": "Demodulation failed."
                 }
 
                 interleaving_result = {
                     "available": False,
-                    "reason": (
-                        "Demodulation failed."
-                    )
+                    "reason": "Demodulation failed."
                 }
 
                 deinterleaving_result = {
                     "available": False,
                     "success": False,
                     "type": "NONE",
-                    "reason": (
-                        "Demodulation failed."
-                    )
+                    "reason": "Demodulation failed."
                 }
 
 
@@ -616,19 +551,15 @@ async def analyze(
 
             "demodulation": demod_result,
 
-            "bitstream_analysis":
-                bitstream_analysis,
+            "bitstream_analysis": bitstream_analysis,
 
-            "frame_structure":
-                frame_structure_result,
+            "frame_structure": frame_structure_result,
 
             "fec": fec_result,
 
-            "interleaving":
-                interleaving_result,
+            "interleaving": interleaving_result,
 
-            "deinterleaving":
-                deinterleaving_result,
+            "deinterleaving": deinterleaving_result,
 
             "preprocessing": prep,
 

@@ -874,3 +874,494 @@ class InterleavingAnalyzer:
         return analyze_interleaving(
             bits
         )
+
+
+# ============================================================
+# AUTOMATIC FOUR-WAY INTERLEAVING DETECTION + DEINTERLEAVING
+# ============================================================
+
+def _repeat_structure_score(bits):
+    """
+    Estimate repeated-frame / repeated-block structure.
+
+    This is deliberately conservative: it is only a recoverability
+    signal used to compare deinterleaver candidates. It does not
+    identify a protocol or prove an interleaving scheme.
+    """
+
+    n = len(bits)
+
+    if n < 64:
+        return 0.0
+
+    best = 0.0
+
+    for size in (16, 32, 64, 128, 256):
+        blocks = n // size
+
+        if blocks < 3:
+            continue
+
+        x = bits[:blocks * size].reshape(blocks, size)
+
+        reference = x[0]
+        agreement = np.mean(x[1:] == reference)
+
+        if agreement > best:
+            best = float(agreement)
+
+    # Random binary streams tend toward ~0.5 agreement.
+    # Map 0.5..1.0 into 0..1 conservatively.
+    return float(
+        np.clip(
+            (best - 0.50) / 0.50,
+            0.0,
+            1.0
+        )
+    )
+
+
+def _candidate_recoverability(bits):
+    """
+    Score how much recoverable sequential structure is present.
+
+    Higher is better. This is used only to rank supported
+    deinterleaver candidates against the original stream.
+    """
+
+    bits = _clean_bits(bits)
+
+    if len(bits) < 64:
+        return {
+            "quality": 0.0,
+            "periodicity": 0.0,
+            "repeat": 0.0,
+            "interleaving_penalty": 0.0
+        }
+
+    autocorrelation = _autocorrelation(
+        bits,
+        max_lag=min(256, len(bits) // 2)
+    )
+
+    correlations = autocorrelation.get(
+        "correlations",
+        []
+    )
+
+    # Ignore the first few lags because those mostly reflect
+    # local bit transitions rather than frame/block structure.
+    useful = correlations[3:]
+
+    periodicity = (
+        float(np.max(np.abs(useful)))
+        if useful
+        else 0.0
+    )
+
+    repeat = _repeat_structure_score(bits)
+
+    block_statistics = _block_statistics(bits)
+
+    transition = _transition_rate(bits)
+
+    _, interleaving_score = _classify_evidence(
+        bits,
+        transition,
+        autocorrelation,
+        block_statistics
+    )
+
+    # More recoverable structure + less unexplained interleaving
+    # evidence = better candidate.
+    quality = (
+        0.55 * periodicity
+        +
+        0.30 * repeat
+        +
+        0.15 * (1.0 - interleaving_score)
+    )
+
+    return {
+        "quality": round(
+            float(np.clip(quality, 0.0, 1.0)),
+            4
+        ),
+        "periodicity": round(
+            float(periodicity),
+            4
+        ),
+        "repeat": round(
+            float(repeat),
+            4
+        ),
+        "interleaving_penalty": round(
+            float(interleaving_score),
+            4
+        )
+    }
+
+
+def _run_supported_deinterleaver(
+    bits,
+    mode,
+    rows=8,
+    branches=4,
+    delay=3,
+    seed=42
+):
+    """
+    Apply one of SPECTRA's four supported deterministic
+    deinterleavers.
+
+    Returns a uint8 array or None on failure.
+    """
+
+    from backend.analysis.interleavers import (
+        block_deinterleave,
+        convolutional_deinterleave,
+        diagonal_deinterleave,
+        pseudo_random_deinterleave
+    )
+
+    try:
+
+        if mode == "BLOCK":
+            return np.asarray(
+                block_deinterleave(
+                    bits,
+                    rows=int(rows)
+                ),
+                dtype=np.uint8
+            )
+
+        if mode == "CONVOLUTIONAL":
+            return np.asarray(
+                convolutional_deinterleave(
+                    bits,
+                    branches=int(branches),
+                    delay=int(delay)
+                ),
+                dtype=np.uint8
+            )
+
+        if mode == "DIAGONAL":
+            return np.asarray(
+                diagonal_deinterleave(
+                    bits,
+                    rows=int(rows)
+                ),
+                dtype=np.uint8
+            )
+
+        if mode == "PSEUDO-RANDOM":
+            return np.asarray(
+                pseudo_random_deinterleave(
+                    bits,
+                    seed=int(seed)
+                ),
+                dtype=np.uint8
+            )
+
+    except Exception:
+        return None
+
+    return None
+
+
+def auto_detect_and_deinterleave(
+    bits,
+    rows=8,
+    branches=4,
+    delay=3,
+    seed=42
+):
+    """
+    Automatically choose among the four supported interleaving
+    families and apply the corresponding deinterleaver.
+
+    Supported candidates:
+        BLOCK
+        CONVOLUTIONAL
+        DIAGONAL
+        PSEUDO-RANDOM
+
+    This is intentionally conservative. An unknown arbitrary RF
+    bitstream cannot mathematically prove its interleaver without
+    additional framing/reference information. The function therefore
+    requires a meaningful recoverability gain and a separation margin
+    before returning VALIDATED.
+    """
+
+    clean = _clean_bits(bits)
+    n = len(clean)
+
+    if n < 128:
+        return {
+            "detected": False,
+            "type": "UNKNOWN",
+            "confidence": 0.0,
+            "status": "INSUFFICIENT_DATA",
+            "candidates": {},
+            "deinterleaving": {
+                "available": False,
+                "success": False,
+                "type": "NONE",
+                "reason": "At least 128 bits are required for automatic four-way interleaving detection."
+            }
+        }
+
+    baseline = _candidate_recoverability(clean)
+
+    structure = _interleaving_structure(clean)
+
+    structural_prior = {
+        "BLOCK": float(
+            structure.get("block_score", 0.0)
+        ),
+        "CONVOLUTIONAL": float(
+            structure.get("stride_score", 0.0)
+        ),
+        "DIAGONAL": float(
+            structure.get("matrix_score", 0.0)
+        ),
+        "PSEUDO-RANDOM": 0.0
+    }
+
+    results = {}
+
+    for mode in (
+        "BLOCK",
+        "CONVOLUTIONAL",
+        "DIAGONAL",
+        "PSEUDO-RANDOM"
+    ):
+
+        candidate_bits = _run_supported_deinterleaver(
+            clean,
+            mode,
+            rows=rows,
+            branches=branches,
+            delay=delay,
+            seed=seed
+        )
+
+        if candidate_bits is None or len(candidate_bits) != n:
+            results[mode] = {
+                "available": False,
+                "score": 0.0,
+                "recoverability_gain": 0.0,
+                "reason": "Candidate deinterleaver failed."
+            }
+            continue
+
+        metrics = _candidate_recoverability(
+            candidate_bits
+        )
+
+        gain = (
+            float(metrics["quality"])
+            -
+            float(baseline["quality"])
+        )
+
+        # Convert gain into a conservative 0..1 score.
+        gain_score = float(
+            np.clip(
+                (gain - 0.02) / 0.20,
+                0.0,
+                1.0
+            )
+        )
+
+        prior = structural_prior[mode]
+
+        # Structural prior helps the three deterministic geometric
+        # families; pseudo-random relies almost entirely on the
+        # observed recoverability improvement.
+        if mode == "PSEUDO-RANDOM":
+            candidate_score = (
+                0.80 * gain_score
+                +
+                0.20 * metrics["repeat"]
+            )
+        else:
+            candidate_score = (
+                0.55 * gain_score
+                +
+                0.45 * prior
+            )
+
+        results[mode] = {
+            "available": True,
+            "score": round(
+                float(np.clip(candidate_score, 0.0, 1.0)),
+                4
+            ),
+            "recoverability_gain": round(
+                float(gain),
+                4
+            ),
+            "recoverability": metrics,
+            "structural_prior": round(
+                float(prior),
+                4
+            )
+        }
+
+    valid_candidates = [
+        (mode, item)
+        for mode, item in results.items()
+        if item.get("available")
+    ]
+
+    if not valid_candidates:
+        return {
+            "detected": False,
+            "type": "UNKNOWN",
+            "confidence": 0.0,
+            "status": "NO_VALID_CANDIDATE",
+            "candidates": results,
+            "deinterleaving": {
+                "available": False,
+                "success": False,
+                "type": "NONE",
+                "reason": "No supported deinterleaver could be evaluated."
+            }
+        }
+
+    ranked = sorted(
+        valid_candidates,
+        key=lambda item: float(
+            item[1].get("score", 0.0)
+        ),
+        reverse=True
+    )
+
+    best_mode, best = ranked[0]
+
+    best_score = float(
+        best.get("score", 0.0)
+    )
+
+    best_gain = float(
+        best.get("recoverability_gain", 0.0)
+    )
+
+    second_score = (
+        float(ranked[1][1].get("score", 0.0))
+        if len(ranked) > 1
+        else 0.0
+    )
+
+    margin = (
+        best_score
+        -
+        second_score
+    )
+
+    # Conservative validation gate.
+    validated = (
+        best_score >= 0.50
+        and
+        best_gain >= 0.04
+        and
+        margin >= 0.08
+    )
+
+    if not validated:
+        confidence = float(
+            np.clip(
+                max(
+                    0.0,
+                    best_score * 100.0
+                ),
+                0.0,
+                100.0
+            )
+        )
+
+        return {
+            "detected": False,
+            "type": "UNKNOWN",
+            "confidence": round(
+                confidence,
+                2
+            ),
+            "status": "AMBIGUOUS",
+            "best_candidate": best_mode,
+            "candidates": results,
+            "deinterleaving": {
+                "available": False,
+                "success": False,
+                "type": "NONE",
+                "reason": "No candidate passed the recoverability and separation validation gates."
+            }
+        }
+
+    recovered = _run_supported_deinterleaver(
+        clean,
+        best_mode,
+        rows=rows,
+        branches=branches,
+        delay=delay,
+        seed=seed
+    )
+
+    if recovered is None:
+        return {
+            "detected": False,
+            "type": "UNKNOWN",
+            "confidence": 0.0,
+            "status": "DEINTERLEAVER_FAILED",
+            "best_candidate": best_mode,
+            "candidates": results,
+            "deinterleaving": {
+                "available": False,
+                "success": False,
+                "type": "NONE",
+                "reason": "The validated candidate could not be applied."
+            }
+        }
+
+    confidence = float(
+        np.clip(
+            (
+                0.60 * best_score
+                +
+                0.40 * np.clip(
+                    (margin - 0.08) / 0.25,
+                    0.0,
+                    1.0
+                )
+            )
+            * 100.0,
+            0.0,
+            100.0
+        )
+    )
+
+    return {
+        "detected": True,
+        "type": best_mode,
+        "confidence": round(
+            confidence,
+            2
+        ),
+        "status": "VALIDATED",
+        "best_candidate": best_mode,
+        "candidates": results,
+        "baseline": baseline,
+        "deinterleaving": {
+            "available": True,
+            "success": True,
+            "type": best_mode,
+            "input_bits": int(n),
+            "output_bits": int(len(recovered)),
+            "bitstream": "".join(
+                str(int(bit))
+                for bit in recovered
+            )
+        }
+    }
+
