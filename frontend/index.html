@@ -265,9 +265,14 @@ button,input,select{
 
 .upload-grid{
   display:grid;
-  grid-template-columns:1.5fr 1fr 150px 140px auto;
+  grid-template-columns:
+    minmax(260px, 1.5fr)
+    minmax(170px, 1fr)
+    150px
+    140px
+    auto;
   gap:10px;
-  align-items:center
+  align-items:center;
 }
 
 .drop{
@@ -926,7 +931,12 @@ td:last-child{
   }
 
   .upload-grid{
-    grid-template-columns:1.5fr 1fr 130px 120px auto
+    grid-template-columns:
+      minmax(230px, 1.5fr)
+      minmax(170px, 1fr)
+      130px
+      120px
+      auto;
   }
 
   .param-layout{
@@ -1251,6 +1261,22 @@ td:last-child{
 
       </div>
 
+
+
+      <div class="field reference-field">
+
+        <label>
+          Reference Bitstream
+        </label>
+
+        <input
+          id="referenceBits"
+          type="text"
+          placeholder="Enter known bits, e.g. 101100101011..."
+          autocomplete="off"
+        >
+
+      </div>
 
       <button id="go" class="primary">
         Analyze Signal
@@ -1638,6 +1664,18 @@ td:last-child{
 
         </div>
 
+        <div class="digital-metric">
+
+          <label>
+            Synchronization
+          </label>
+
+          <b id="demodSync">
+            —
+          </b>
+
+        </div>
+
 
         <div class="digital-metric">
 
@@ -1975,6 +2013,120 @@ td:last-child{
 
       </div>
 
+      <div class="card digital-card full">
+
+        <div class="digital-title">
+
+          <h3>
+            BER Analysis / Reference Validation
+          </h3>
+
+          <span id="berStatus">
+            Waiting for reference bitstream
+          </span>
+
+        </div>
+
+
+        <div class="digital-metrics">
+
+          <div class="digital-metric">
+
+            <label>
+              BER
+            </label>
+
+            <b id="berValue">
+              —
+            </b>
+
+          </div>
+
+
+          <div class="digital-metric">
+
+            <label>
+              Bit Errors
+            </label>
+
+            <b id="berErrors">
+              —
+            </b>
+
+          </div>
+
+
+          <div class="digital-metric">
+
+            <label>
+              Compared Bits
+            </label>
+
+            <b id="berCompared">
+              —
+            </b>
+
+          </div>
+
+
+          <div class="digital-metric">
+
+            <label>
+              Reference Bits
+            </label>
+
+            <b id="berReference">
+              —
+            </b>
+
+          </div>
+
+
+          <div class="digital-metric">
+
+            <label>
+              Recovered Bits
+            </label>
+
+            <b id="berRecovered">
+              —
+            </b>
+
+          </div>
+
+        </div>
+
+
+        <div class="evidence">
+
+          <label>
+            BER Interpretation
+          </label>
+
+          <div
+            id="berInterpretation"
+            class="bitstream"
+            style="min-height:50px;max-height:100px;"
+          >
+            Reference bitstream required for BER calculation.
+          </div>
+
+        </div>
+
+
+        <div class="disclaimer">
+
+          <strong>Interpretation:</strong>
+
+          BER is calculated by comparing the recovered demodulated
+          bitstream against the supplied reference bitstream.
+          A BER value is only available when a valid reference
+          bitstream is provided.
+
+        </div>
+
+      </div>
+
 
       <div class="digital-metrics">
 
@@ -2157,6 +2309,132 @@ td:last-child{
 
     </div>
 
+
+    <!-- =====================================================
+        HEADER / PAYLOAD ANALYSIS
+    ====================================================== -->
+
+    <div class="card digital-card full">
+
+      <div class="digital-title">
+        <h3>Header / Payload Analysis</h3>
+        <span id="headerPayloadStatus">
+          Waiting for analysis
+        </span>
+      </div>
+
+      <div class="digital-metrics">
+
+        <div class="digital-metric">
+          <label>Sync Word</label>
+          <b id="hpSyncWord">—</b>
+        </div>
+
+        <div class="digital-metric">
+          <label>Sync Bytes</label>
+          <b id="hpSyncBytes">—</b>
+        </div>
+
+        <div class="digital-metric">
+          <label>Header Length</label>
+          <b id="hpHeaderLength">—</b>
+        </div>
+
+        <div class="digital-metric">
+          <label>Payload Length</label>
+          <b id="hpPayloadLength">—</b>
+        </div>
+
+      </div>
+
+      <div class="evidence">
+
+        <label>Header</label>
+
+        <div class="digital-metrics">
+
+          <div class="digital-metric">
+            <label>Offset</label>
+            <b id="hpHeaderOffset">—</b>
+          </div>
+
+          <div class="digital-metric">
+            <label>Agreement</label>
+            <b id="hpHeaderAgreement">—</b>
+          </div>
+
+        </div>
+
+        <label>Header HEX</label>
+
+        <div id="hpHeaderHex"
+            class="bitstream"
+            style="min-height:50px;max-height:120px;">
+          —
+        </div>
+
+      </div>
+
+      <div class="evidence">
+
+        <label>Payload</label>
+
+        <div class="digital-metrics">
+
+          <div class="digital-metric">
+            <label>Offset</label>
+            <b id="hpPayloadOffset">—</b>
+          </div>
+
+          <div class="digital-metric">
+            <label>Length</label>
+            <b id="hpPayloadLength2">—</b>
+          </div>
+
+          <div class="digital-metric">
+            <label>Confidence</label>
+            <b id="hpPayloadConfidence">—</b>
+          </div>
+
+        </div>
+
+        <label>Payload HEX</label>
+
+        <div id="hpPayloadHex"
+            class="bitstream"
+            style="min-height:50px;max-height:120px;">
+          —
+        </div>
+
+        <label>Payload ASCII</label>
+
+        <div id="hpPayloadAscii"
+            class="bitstream"
+            style="min-height:50px;max-height:120px;">
+          —
+        </div>
+
+      </div>
+
+      <div class="evidence">
+
+        <label>CRC</label>
+
+        <div id="hpCrc"
+            class="bitstream"
+            style="min-height:50px;max-height:100px;">
+          No CRC candidate detected.
+        </div>
+
+      </div>
+
+      <div class="disclaimer">
+        <strong>Interpretation:</strong>
+        Header and payload are heuristic candidates derived from
+        repeated frame structure. They are not guaranteed protocol fields.
+      </div>
+
+    </div>
 
     <!-- =====================================================
          INTERLEAVING
@@ -2416,7 +2694,7 @@ td:last-child{
       </div>
 
     </div>
-    </div>
+
 
 
   </div>
@@ -2596,7 +2874,35 @@ function resetDigital(){
   set('sps','—');
   set('symbolsRecovered','—');
   set('bitsRecovered','—');
+
   set('bitBalance','—');
+
+
+  set(
+    'berStatus',
+    'Waiting for reference bitstream'
+  );
+
+  set(
+    'berValue',
+    '—'
+  );
+
+  set(
+    'berErrors',
+    '—'
+  );
+
+  set(
+    'berCompared',
+    '—'
+  );
+
+  set(
+    'berReference',
+    '—'
+  );
+
 
   set('fecStatus','Waiting for analysis');
 
@@ -2894,6 +3200,199 @@ function renderFrameStructureFromBackend(result){
   set('frameConsistency', Number.isFinite(Number(result.consistency)) ? num(Number(result.consistency) * 100, 2) + '%' : '—');
   set('framePattern', result.pattern || '—');
   set('frameSyncWord', result.sync_word_hex || result.sync_word_bits || result.reason || '—');
+}
+
+function renderHeaderPayloadFromBackend(result){
+
+  const status =
+    document.getElementById('headerPayloadStatus');
+
+  if(!result || result.payload_analysis_available !== true){
+
+    set(
+      'headerPayloadStatus',
+      result && result.payload_reason
+        ? result.payload_reason
+        : 'Header / payload analysis unavailable.'
+    );
+
+    set('hpSyncWord', '—');
+    set('hpSyncBytes', '—');
+    set('hpHeaderLength', '—');
+    set('hpPayloadLength', '—');
+    set('hpHeaderOffset', '—');
+    set('hpHeaderAgreement', '—');
+    set('hpHeaderHex', '—');
+    set('hpPayloadOffset', '—');
+    set('hpPayloadLength2', '—');
+    set('hpPayloadConfidence', '—');
+    set('hpPayloadHex', '—');
+    set('hpPayloadAscii', '—');
+    set(
+      'hpCrc',
+      'No CRC candidate detected.'
+    );
+
+    return;
+  }
+
+  set(
+    'headerPayloadStatus',
+    result.payload_reason ||
+    'Header / payload analysis available'
+  );
+
+  set(
+    'hpSyncWord',
+    result.sync_word_hex ||
+    result.sync_word_bits ||
+    '—'
+  );
+
+  set(
+    'hpSyncBytes',
+    Number.isFinite(Number(result.sync_bytes))
+      ? Number(result.sync_bytes).toLocaleString()
+      : '—'
+  );
+
+
+  const header =
+    result.header_candidate || null;
+
+  if(header){
+
+    set(
+      'hpHeaderOffset',
+      Number.isFinite(Number(header.offset_bytes))
+        ? Number(header.offset_bytes).toLocaleString() + ' bytes'
+        : '—'
+    );
+
+    set(
+      'hpHeaderLength',
+      Number.isFinite(Number(header.length_bytes))
+        ? Number(header.length_bytes).toLocaleString() + ' bytes'
+        : '—'
+    );
+
+    set(
+      'hpHeaderAgreement',
+      Number.isFinite(Number(header.agreement))
+        ? num(Number(header.agreement) * 100, 2) + '%'
+        : '—'
+    );
+
+    set(
+      'hpHeaderHex',
+      header.hex || '—'
+    );
+
+  }else{
+
+    set('hpHeaderOffset', '—');
+    set('hpHeaderLength', '—');
+    set('hpHeaderAgreement', '—');
+    set('hpHeaderHex', 'No header candidate detected.');
+  }
+
+
+  const payload =
+    result.payload_candidate || null;
+
+  if(payload){
+
+    set(
+      'hpPayloadOffset',
+      Number.isFinite(Number(payload.offset_bytes))
+        ? Number(payload.offset_bytes).toLocaleString() + ' bytes'
+        : '—'
+    );
+
+    set(
+      'hpPayloadLength',
+      Number.isFinite(Number(payload.length_bytes))
+        ? Number(payload.length_bytes).toLocaleString() + ' bytes'
+        : '—'
+    );
+
+    set(
+      'hpPayloadLength2',
+      Number.isFinite(Number(payload.length_bytes))
+        ? Number(payload.length_bytes).toLocaleString() + ' bytes'
+        : '—'
+    );
+
+    set(
+      'hpPayloadConfidence',
+      Number.isFinite(Number(payload.confidence))
+        ? num(Number(payload.confidence) * 100, 2) + '%'
+        : '—'
+    );
+
+    set(
+      'hpPayloadHex',
+      payload.hex_preview || '—'
+    );
+
+    set(
+      'hpPayloadAscii',
+      payload.ascii_preview || '—'
+    );
+
+  }else{
+
+    set('hpPayloadOffset', '—');
+    set('hpPayloadLength', '—');
+    set('hpPayloadLength2', '—');
+    set('hpPayloadConfidence', '—');
+    set('hpPayloadHex', 'No payload candidate detected.');
+    set('hpPayloadAscii', 'No payload candidate detected.');
+  }
+
+
+  const crc =
+    result.crc_candidate || null;
+
+  if(crc){
+
+    let crcText = [];
+
+    if(crc.type){
+      crcText.push('Type: ' + crc.type);
+    }
+
+    if(crc.crc_bytes !== undefined){
+      crcText.push(
+        'Length: ' +
+        Number(crc.crc_bytes).toLocaleString() +
+        ' bytes'
+      );
+    }
+
+    if(crc.score !== undefined){
+
+      crcText.push(
+        'Score: ' +
+        num(Number(crc.score) * 100, 2) +
+        '%'
+      );
+    }
+
+    set(
+      'hpCrc',
+      crcText.length
+        ? crcText.join(' • ')
+        : 'CRC candidate detected.'
+    );
+
+  }else{
+
+    set(
+      'hpCrc',
+      'No CRC candidate detected.'
+    );
+  }
 }
 
 
@@ -3235,6 +3734,15 @@ function renderDigital(d){
     );
 
     set(
+      'demodSync',
+      demod.synchronization_applied === true
+        ? 'Applied'
+        : demod.synchronization_applied === false
+          ? 'Not applied'
+          : 'Unknown'
+    );
+
+    set(
       'symbolRate',
       Number.isFinite(
         Number(demod.symbol_rate)
@@ -3313,6 +3821,7 @@ function renderDigital(d){
         renderFrameStructureFromBackend(
           d.frame_structure
         );
+        renderHeaderPayloadFromBackend(d.frame_structure);
       }else{
         renderFrameStructure(
           bits.split('')
@@ -3716,6 +4225,90 @@ function renderDigital(d){
 
   }
 
+  /* ----------------------------------------------------------
+    BER / REFERENCE VALIDATION
+  ---------------------------------------------------------- */
+
+  const ber =
+    d.ber || {};
+
+  if(ber.available){
+
+    set(
+      'berStatus',
+      'Reference comparison complete'
+    );
+
+    set(
+      'berValue',
+      Number(ber.ber).toFixed(6)
+    );
+
+    set(
+      'berErrors',
+      Number(
+        ber.bit_errors || 0
+      ).toLocaleString()
+    );
+
+    set(
+      'berCompared',
+      Number(
+        ber.compared_bits || 0
+      ).toLocaleString()
+    );
+
+    set(
+      'berReference',
+      Number(
+        ber.reference_bits || 0
+      ).toLocaleString()
+    );
+
+      set(
+    'berRecovered',
+    Number(
+      ber.recovered_bits || 0
+    ).toLocaleString()
+  );
+
+  let berInterpretation = 'BER calculated successfully.';
+
+  if(Number(ber.ber) === 0){
+    berInterpretation =
+      'No bit errors detected against the supplied reference.';
+  }else if(Number.isFinite(Number(ber.ber))){
+    berInterpretation =
+      'Bit errors detected against the supplied reference.';
+  }
+
+  set(
+    'berInterpretation',
+    berInterpretation
+  );
+
+
+  }else{
+
+    set(
+      'berStatus',
+      ber.reason ||
+      'Reference bitstream required'
+    );
+
+    set(
+      'berRecovered',
+      '—'
+    );
+
+    set(
+      'berInterpretation',
+      ber.reason ||
+      'Reference bitstream required for BER calculation.'
+    );
+
+  }
+
 
   /* ----------------------------------------------------------
      INTERLEAVING
@@ -4064,30 +4657,180 @@ $('go').onclick = async () => {
     $('iq').value
   );
 
+  fd.append(
+    'reference_bits',
+    $('referenceBits').value.trim()
+  );
 
 
   try{
 
+    /* --------------------------------------------------------
+      START BACKGROUND ANALYSIS
+    -------------------------------------------------------- */
+
     const r =
       await fetch(
-        '/api/analyze',
+        '/api/analyze/start',
         {
           method:'POST',
           body:fd
         }
       );
 
+    const startRaw =
+      await r.text();
 
-    const d =
-      await r.json();
+    let startData = {};
 
+    try{
+
+      startData =
+        startRaw
+          ? JSON.parse(startRaw)
+          : {};
+
+    }catch(err){
+
+      throw Error(
+        `Backend returned invalid response (${r.status}).`
+      );
+
+    }
 
     if(!r.ok){
 
       throw Error(
-        d.detail ||
-        'Analysis failed'
+        startData.detail ||
+        startData.message ||
+        `Analysis failed (${r.status})`
       );
+
+    }
+
+    const jobId =
+      startData.job_id;
+
+    if(!jobId){
+
+      throw Error(
+        'Backend did not return an analysis job ID.'
+      );
+
+    }
+
+
+    /* --------------------------------------------------------
+      POLL FOR RESULT
+    -------------------------------------------------------- */
+
+    let d = null;
+
+    while(true){
+
+      await new Promise(
+        resolve =>
+          setTimeout(
+            resolve,
+            2000
+          )
+      );
+
+
+      const statusResponse =
+        await fetch(
+          `/api/analyze/status/${jobId}`,
+          {
+            cache:'no-store'
+          }
+        );
+
+
+      const statusRaw =
+        await statusResponse.text();
+
+
+      let statusData = {};
+
+      try{
+
+        statusData =
+          statusRaw
+            ? JSON.parse(statusRaw)
+            : {};
+
+      }catch(err){
+
+        throw Error(
+          `Invalid status response (${statusResponse.status}).`
+        );
+
+      }
+
+
+      if(!statusResponse.ok){
+
+        throw Error(
+          statusData.detail ||
+          statusData.error ||
+          `Analysis status failed (${statusResponse.status})`
+        );
+
+      }
+
+
+      /* ---------------------------------------------
+        UPDATE UI WHILE ANALYSIS RUNS
+      --------------------------------------------- */
+
+      if(statusData.status === 'queued'){
+
+        setStatus(
+          'busy',
+          'ANALYSIS QUEUED'
+        );
+
+        $('go').innerHTML =
+          '<span class="spinner"></span> Queued…';
+
+        continue;
+
+      }
+
+
+      if(statusData.status === 'processing'){
+
+        setStatus(
+          'busy',
+          'ANALYZING'
+        );
+
+        $('go').innerHTML =
+          '<span class="spinner"></span> Analyzing…';
+
+        continue;
+
+      }
+
+
+      if(statusData.status === 'error'){
+
+        throw Error(
+          statusData.error ||
+          'Background analysis failed.'
+        );
+
+      }
+
+
+      if(statusData.status === 'complete'){
+
+        d =
+          statusData.result;
+
+        break;
+
+      }
 
     }
 

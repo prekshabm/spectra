@@ -1,4 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+import asyncio
+import io
+from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -58,6 +62,83 @@ app.add_middleware(
 classifier = ModulationClassifier(
     MODEL
 )
+
+# ============================================================
+# BACKGROUND ANALYSIS JOBS
+# ============================================================
+
+analysis_jobs = {}
+
+analysis_executor = ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="spectra-analysis"
+)
+
+
+def _run_analysis_job(
+    job_id,
+    raw,
+    filename,
+    sample_rate,
+    dtype,
+    iq_format,
+    reference_bits
+):
+    """
+    Run the existing /api/analyze pipeline in a worker thread.
+
+    The existing analysis implementation is intentionally reused
+    so DSP, ML, demodulation, FEC, interleaving and frame analysis
+    remain unchanged.
+    """
+
+    analysis_jobs[job_id]["status"] = "processing"
+
+    try:
+
+        upload = UploadFile(
+            file=io.BytesIO(raw),
+            filename=filename
+        )
+
+        result = asyncio.run(
+            analyze(
+                file=upload,
+                sample_rate=sample_rate,
+                dtype=dtype,
+                iq_format=iq_format,
+                reference_bits=reference_bits
+            )
+        )
+
+        analysis_jobs[job_id].update({
+            "status": "complete",
+            "result": result
+        })
+
+    except HTTPException as e:
+
+        analysis_jobs[job_id].update({
+            "status": "error",
+            "error": e.detail
+        })
+
+    except Exception as e:
+
+        analysis_jobs[job_id].update({
+            "status": "error",
+            "error": str(e)
+        })
+
+    finally:
+
+        try:
+            asyncio.run(
+                upload.close()
+            )
+        except Exception:
+            pass
+
 
 
 # ============================================================
@@ -272,12 +353,83 @@ def apply_deinterleaver(
 # ANALYSIS
 # ============================================================
 
+# ============================================================
+# ASYNC ANALYSIS START
+# ============================================================
+
+@app.post("/api/analyze/start", status_code=202)
+async def start_analysis(
+    file: UploadFile = File(...),
+    sample_rate: float = Form(1_000_000),
+    dtype: str = Form("float32"),
+    iq_format: str = Form("IQ"),
+    reference_bits: str = Form("")
+):
+
+    raw = await file.read()
+
+    job_id = uuid4().hex
+
+    analysis_jobs[job_id] = {
+        "status": "queued",
+        "result": None,
+        "error": None
+    }
+
+    analysis_executor.submit(
+        _run_analysis_job,
+        job_id,
+        raw,
+        file.filename,
+        sample_rate,
+        dtype,
+        iq_format,
+        reference_bits
+    )
+
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "message": "Analysis started."
+    }
+
+
+@app.get("/api/analyze/status/{job_id}")
+async def analysis_status(job_id: str):
+
+    job = analysis_jobs.get(job_id)
+
+    if job is None:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Analysis job not found."
+        )
+
+    response = {
+        "job_id": job_id,
+        "status": job["status"]
+    }
+
+    if job["status"] == "complete":
+
+        response["result"] = job["result"]
+
+    elif job["status"] == "error":
+
+        response["error"] = job["error"]
+
+    return response
+
+
+
 @app.post("/api/analyze")
 async def analyze(
     file: UploadFile = File(...),
     sample_rate: float = Form(1_000_000),
     dtype: str = Form("float32"),
-    iq_format: str = Form("IQ")
+    iq_format: str = Form("IQ"),
+    reference_bits: str = Form("")
 ):
 
     raw = await file.read()
@@ -403,7 +555,78 @@ async def analyze(
                     ""
                 )
 
+                ber_result = {
+                    "available": False,
+                    "reason": "Reference bitstream required for BER calculation."
+                }
+
+                if bitstream and reference_bits:
+
+                    recovered = "".join(
+                        b for b in str(bitstream)
+                        if b in ("0", "1")
+                    )
+
+                    reference = "".join(
+                        b for b in str(reference_bits)
+                        if b in ("0", "1")
+                    )
+
+                    compare_length = min(
+                        len(recovered),
+                        len(reference)
+                    )
+
+                    if compare_length > 0:
+
+                        errors = sum(
+                            recovered[i] != reference[i]
+                            for i in range(compare_length)
+                        )
+
+                        ber_result = {
+                            "available": True,
+                            "reference_bits": len(reference),
+                            "recovered_bits": len(recovered),
+                            "compared_bits": compare_length,
+                            "bit_errors": errors,
+                            "ber": errors / compare_length
+                        }
+
                 if bitstream:
+
+                    if reference_bits:
+
+                        recovered = "".join(
+                            b for b in str(bitstream)
+                            if b in ("0", "1")
+                        )
+
+                        reference = "".join(
+                            b for b in str(reference_bits)
+                            if b in ("0", "1")
+                        )
+
+                        compare_length = min(
+                            len(recovered),
+                            len(reference)
+                        )
+
+                        if compare_length > 0:
+
+                            errors = sum(
+                                recovered[i] != reference[i]
+                                for i in range(compare_length)
+                            )
+
+                            ber_result = {
+                                "available": True,
+                                "reference_bits": len(reference),
+                                "recovered_bits": len(recovered),
+                                "compared_bits": compare_length,
+                                "bit_errors": errors,
+                                "ber": errors / compare_length
+                            }
 
                     # --------------------------------------------
                     # BITSTREAM CORRELATION
@@ -551,15 +774,13 @@ async def analyze(
 
             "demodulation": demod_result,
 
-            "bitstream_analysis": bitstream_analysis,
-
-            "frame_structure": frame_structure_result,
-
             "fec": fec_result,
 
             "interleaving": interleaving_result,
 
-            "deinterleaving": deinterleaving_result,
+            "frame_structure": frame_structure_result,
+
+            "ber": ber_result,
 
             "preprocessing": prep,
 
